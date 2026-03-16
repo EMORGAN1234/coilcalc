@@ -136,10 +136,6 @@ export default function RolledCoilCalculator() {
   const [ctlPieceLength, setCtlPieceLength] = useState("");
   const [ctlScrap, setCtlScrap] = useState("2");
   const [ctlAnyOrientation, setCtlAnyOrientation] = useState(true);
-  // Grain direction: coil grain always runs in the length (rolling) direction.
-  // "length" = piece's LENGTH dimension must align with coil run direction (parallel to coil length)
-  // "width"  = piece's WIDTH dimension must align with coil run direction
-  // "none"   = no grain requirement
   const [ctlGrainReq, setCtlGrainReq] = useState("none");
   const [ctlQtyPcs, setCtlQtyPcs] = useState("");
   const [ctlQtyLbs, setCtlQtyLbs] = useState("");
@@ -192,34 +188,26 @@ export default function RolledCoilCalculator() {
       const scrapPct = (1 - totalYield) * 100;
       const lbsPerFtVal = lbsPerFt(sw, g, density);
 
-      // order size → master lbs needed
-      // orderLbs always represents finished slit product lbs.
-      // masterLbsNeeded = orderLbs / totalYield (applied once, at the end).
       let orderLbs = 0;
       let orderFt = 0;
       let orderPcs = 0;
       const ov = parseFloat(orderVal) || 0;
       if (ov > 0) {
         if (orderUnit === "lbs") {
-          // Customer wants ov lbs of finished slit product
           orderLbs = ov;
-          // Footage of finished slit product at that weight
-          orderFt = coilFeet(orderLbs, sw, g, density); // FIX: was coilFeet(orderLbs * totalYield, ...)
+          orderFt = coilFeet(orderLbs, sw, g, density);
           if (shLen > 0) orderPcs = Math.floor(orderFt / (shLen / 12));
         } else if (orderUnit === "ft") {
           orderFt = ov;
-          // Finished slit lbs for that footage
           orderLbs = orderFt * lbsPerFtVal;
         } else if (orderUnit === "pcs") {
           if (shLen > 0) {
             orderPcs = ov;
             orderFt = (orderPcs * shLen) / 12;
-            // Finished slit lbs for that footage (yield applied once below)
-            orderLbs = orderFt * lbsPerFtVal; // FIX: was pre-dividing by totalYield here
+            orderLbs = orderFt * lbsPerFtVal;
           }
         }
       }
-      // masterLbsNeeded: how much master coil to buy to yield orderLbs of finished slit product
       const masterLbsNeeded = orderLbs > 0 ? orderLbs / totalYield : 0;
       const masterFtNeeded = masterLbsNeeded > 0 ? coilFeet(masterLbsNeeded, mw, g, density) : 0;
       const sheetWt = shLen > 0 ? lbsPerFt(sw, g, density) * (shLen / 12) : 0;
@@ -270,8 +258,6 @@ export default function RolledCoilCalculator() {
       const lbsPerFtSlit = lbsPerFt(sw, gaugeNum, density);
       const outputFtPerSlit = lbsPerFtSlit > 0 ? slitCoilWt / lbsPerFtSlit : 0;
 
-      // Max output coil size limit
-      // Guard: only compute maxWtAtOD if maxOD > coreIn to avoid sqrt of negative
       let coilSizeLimit = 0;
       const maxWtAtOD = (maxOD > 0 && maxOD > coreIn)
         ? ((maxOD * maxOD - coreIn * coreIn) * PI * density * sw) / 4
@@ -297,7 +283,6 @@ export default function RolledCoilCalculator() {
       const masterFt = coilFeet(scWt, scW, gaugeNum, density);
       const masterOD = coilOD(scWt, scW, density, coreIn);
 
-      // Order coverage
       const orderLbsNeeded = slitCalc?.best ? slitCalc.best.masterLbsNeeded : 0;
       const canFulfill = orderLbsNeeded > 0 ? scWt >= orderLbsNeeded : null;
       const leftoverMasterLbs = orderLbsNeeded > 0 ? Math.max(0, scWt - orderLbsNeeded) : 0;
@@ -320,24 +305,18 @@ export default function RolledCoilCalculator() {
   // ═══════════════════════════════════════════════════════
   // CTL CALC
   // ═══════════════════════════════════════════════════════
-  // Coil grain convention: grain runs in the ROLLING direction = along the coil length (run direction).
-  // When we lay a piece with its WIDTH across the coil → piece LENGTH is parallel to coil run → grain along piece LENGTH.
-  // When we lay a piece with its LENGTH across the coil → piece WIDTH is parallel to coil run → grain along piece WIDTH.
-  // ctlGrainReq: "none" | "length" (grain along piece length) | "width" (grain along piece width)
   function calcCTLOption(masterWidth, pieceW, pieceL, ctlScrapPct) {
     const g = gaugeNum;
     if (!masterWidth || masterWidth < 30 || pieceW <= 0 || pieceL <= 0 || g <= 0 || g > 0.325) return null;
 
     const ctlF = (parseFloat(ctlScrapPct) || 0) / 100;
 
-    // tryLayout(pw, pl): pw goes ACROSS the coil width, pl goes ALONG the coil run direction
-    // → grain runs along pl direction (the run direction) = grain is along the PIECE dimension that equals pl
     const tryLayout = (pw, pl) => {
-      if (pw > masterWidth) return null; // piece is wider than coil — never fits
+      if (pw > masterWidth) return null;
       const piecesAcross = Math.floor(masterWidth / pw);
       if (piecesAcross <= 0) return null;
-      const trimIn = masterWidth - piecesAcross * pw; // actual edge drop remaining
-      if (trimIn > 8) return null; // exceeds 8" trim allowance
+      const trimIn = masterWidth - piecesAcross * pw;
+      if (trimIn > 8) return null;
       const trimPct = (trimIn / masterWidth) * 100;
       const widthYield = (piecesAcross * pw) / masterWidth;
       const totalYield = widthYield * (1 - ctlF);
@@ -345,10 +324,8 @@ export default function RolledCoilCalculator() {
       return { piecesAcross, trimIn, trimPct, ctlScrapPct: ctlF * 100, totalYield: totalYield * 100, scrapPct, pw, pl };
     };
 
-    // Normal orientation: pieceW across, pieceL along run → grain along piece LENGTH
-    // Rotated orientation: pieceL across, pieceW along run → grain along piece WIDTH
-    const normalGrainDir = "length"; // grain along piece length in normal orientation
-    const rotatedGrainDir = "width"; // grain along piece width in rotated orientation
+    const normalGrainDir = "length";
+    const rotatedGrainDir = "width";
 
     const normalOk = ctlGrainReq === "none" || ctlGrainReq === normalGrainDir;
     const rotatedOk = (ctlGrainReq === "none" || ctlGrainReq === rotatedGrainDir) && ctlAnyOrientation;
@@ -357,7 +334,6 @@ export default function RolledCoilCalculator() {
     let resultRot = rotatedOk ? tryLayout(pieceL, pieceW) : null;
 
     let rotated = false;
-    // Pick best (more pieces across wins, then lower scrap)
     if (result && resultRot) {
       if (resultRot.piecesAcross > result.piecesAcross ||
         (resultRot.piecesAcross === result.piecesAcross && resultRot.scrapPct < result.scrapPct)) {
@@ -370,7 +346,6 @@ export default function RolledCoilCalculator() {
     }
 
     if (!result) {
-      // Compute what the actual trims would be to give a useful error
       const normalPcs = pieceW <= masterWidth ? Math.floor(masterWidth / pieceW) : 0;
       const normalTrim = normalPcs > 0 ? masterWidth - normalPcs * pieceW : masterWidth - pieceW;
       const rotPcs = ctlAnyOrientation && pieceL <= masterWidth ? Math.floor(masterWidth / pieceL) : 0;
@@ -383,17 +358,19 @@ export default function RolledCoilCalculator() {
     }
 
     const { piecesAcross, trimIn, trimPct, ctlScrapPct: ctlS, totalYield, scrapPct } = result;
-    const cutLength = result.pl; // sheet length dimension consumed per cut
+    const cutLength = result.pl;
     const lbsPerFtMaster = lbsPerFt(masterWidth, gaugeNum, density);
 
-    // Order sizing
     const pcWt = result.pw * result.pl * gaugeNum * density;
     let orderPcs = 0, orderLbs = 0, orderFt2 = 0;
     const pv = parseFloat(ctlQtyPcs) || 0;
     if (pv > 0) { orderPcs = pv; orderLbs = pv * pcWt; orderFt2 = pv * (result.pw * result.pl / 144); }
 
     const cutsNeeded = orderPcs > 0 ? Math.ceil(orderPcs / piecesAcross) : 0;
-    const masterFtNeeded = cutsNeeded > 0 ? (cutsNeeded * cutLength) / (12 * (1 - (parseFloat(ctlScrap) || 0) / 100)) : 0;
+    // FIX #3: use ctlF (already parsed from ctlScrapPct param) instead of re-parsing ctlScrap state
+    const masterFtNeeded = cutsNeeded > 0
+      ? (cutsNeeded * cutLength) / (12 * (1 - ctlF))
+      : 0;
     const masterLbsNeeded = masterFtNeeded * lbsPerFtMaster;
 
     return {
@@ -479,7 +456,6 @@ export default function RolledCoilCalculator() {
       const cutsAvail = pl > 0 ? Math.floor(usableFt / (pl / 12)) : 0;
       const pcsAvail = cutsAvail * opt.piecesAcross;
 
-      // Order fulfillment from this single coil
       const cutsNeeded = orderPcs > 0 ? Math.ceil(orderPcs / opt.piecesAcross) : 0;
       const ftNeeded = cutsNeeded > 0 ? (cutsNeeded * opt.cutLength) / (12 * (1 - ctlScrapF)) : 0;
       const lbsNeeded = ftNeeded * lbsPerFtCoil;
@@ -578,7 +554,8 @@ export default function RolledCoilCalculator() {
               { l: "Edge Offal", v: `${fmt(r.offalIn, 3)}" (${fmt(r.offalPct, 1)}%)` },
               { l: "Slit Yield", v: `${fmt(r.slitYield, 2)}%` },
               { l: "Heads/Tails Scrap", v: `${headsTails}%`, dim: true },
-              { l: "Total Scrap (edge + H/T)", v: `${fmt(r.scrapPct, 2)}%`, accent: true },
+              // FIX #2: label changed from "Total Scrap (edge + H/T)" to "Total Scrap (combined)"
+              { l: "Total Scrap (combined)", v: `${fmt(r.scrapPct, 2)}%`, accent: true },
               { l: "lbs / ft (slit)", v: fmt(r.lbsPerFtVal, 4) },
               ...(r.masterLbsNeeded > 0 ? [
                 { l: "Master lbs needed", v: `${fmt(r.masterLbsNeeded, 0)} lbs`, bold: true },
@@ -665,8 +642,9 @@ export default function RolledCoilCalculator() {
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
           <div>
+            {/* FIX #4: wrap scWt in fmt() to avoid raw float display */}
             <p style={{ fontSize: 16, fontWeight: 800, color: "#171717", margin: 0 }}>
-              {analysis.scW || "?"}″ wide · {analysis.scWt || "?"}  lbs
+              {analysis.scW || "?"}″ wide · {analysis.scWt ? fmt(analysis.scWt, 0) : "?"}  lbs
             </p>
             {sc.tag && <p style={{ fontSize: 11, color: "#737373", margin: "2px 0 0", fontWeight: 600 }}>TAG: {sc.tag}</p>}
           </div>
@@ -764,7 +742,7 @@ export default function RolledCoilCalculator() {
       { l: "Slits", v: String(best.numSlits) },
       { l: "Edge Offal", v: `${fmt(best.offalIn, 3)}" (${fmt(best.offalPct, 1)}%)` },
       { l: "Heads/Tails Scrap", v: `${htNum}%`, dim: true },
-      { l: "Total Scrap (incl. H/T)", v: `${fmt(best.scrapPct, 2)}%`, accent: true },
+      { l: "Total Scrap (combined)", v: `${fmt(best.scrapPct, 2)}%`, accent: true },
       { l: "lbs / ft (slit)", v: fmt(best.lbsPerFtVal, 4) },
       ...(best.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(best.masterLbsNeeded, 0)} lbs` }] : []),
     ];
