@@ -193,28 +193,33 @@ export default function RolledCoilCalculator() {
       const lbsPerFtVal = lbsPerFt(sw, g, density);
 
       // order size → master lbs needed
+      // orderLbs always represents finished slit product lbs.
+      // masterLbsNeeded = orderLbs / totalYield (applied once, at the end).
       let orderLbs = 0;
       let orderFt = 0;
       let orderPcs = 0;
       const ov = parseFloat(orderVal) || 0;
       if (ov > 0) {
         if (orderUnit === "lbs") {
+          // Customer wants ov lbs of finished slit product
           orderLbs = ov;
-          orderFt = coilFeet(orderLbs * totalYield, sw, g, density);
+          // Footage of finished slit product at that weight
+          orderFt = coilFeet(orderLbs, sw, g, density); // FIX: was coilFeet(orderLbs * totalYield, ...)
           if (shLen > 0) orderPcs = Math.floor(orderFt / (shLen / 12));
         } else if (orderUnit === "ft") {
           orderFt = ov;
-          // orderLbs = finished slit product lbs (ft × lbs/ft of slit coil)
-          // masterLbsNeeded will divide by totalYield — do NOT pre-divide here
+          // Finished slit lbs for that footage
           orderLbs = orderFt * lbsPerFtVal;
         } else if (orderUnit === "pcs") {
           if (shLen > 0) {
             orderPcs = ov;
             orderFt = (orderPcs * shLen) / 12;
-            orderLbs = (orderFt * lbsPerFtVal) / totalYield;
+            // Finished slit lbs for that footage (yield applied once below)
+            orderLbs = orderFt * lbsPerFtVal; // FIX: was pre-dividing by totalYield here
           }
         }
       }
+      // masterLbsNeeded: how much master coil to buy to yield orderLbs of finished slit product
       const masterLbsNeeded = orderLbs > 0 ? orderLbs / totalYield : 0;
       const masterFtNeeded = masterLbsNeeded > 0 ? coilFeet(masterLbsNeeded, mw, g, density) : 0;
       const sheetWt = shLen > 0 ? lbsPerFt(sw, g, density) * (shLen / 12) : 0;
@@ -248,7 +253,6 @@ export default function RolledCoilCalculator() {
     const maxOD = parseFloat(maxCoilOD) || 0;
 
     return stockCoils.map((sc) => {
-      const scWidth = parseFloat(sc.weight) > 0 ? parseFloat(sc.weight) : 0; // weight field
       const scWt = parseFloat(sc.weight) || 0;
       const scW = parseFloat(sc.width) || 0;
       if (scWt <= 0 || scW <= 0) return { ...sc, valid: false, reason: "Missing width or weight" };
@@ -267,8 +271,9 @@ export default function RolledCoilCalculator() {
       const outputFtPerSlit = lbsPerFtSlit > 0 ? slitCoilWt / lbsPerFtSlit : 0;
 
       // Max output coil size limit
+      // Guard: only compute maxWtAtOD if maxOD > coreIn to avoid sqrt of negative
       let coilSizeLimit = 0;
-      const maxWtAtOD = maxOD > 0
+      const maxWtAtOD = (maxOD > 0 && maxOD > coreIn)
         ? ((maxOD * maxOD - coreIn * coreIn) * PI * density * sw) / 4
         : 0;
       if (maxWt > 0 && maxWtAtOD > 0) coilSizeLimit = Math.min(maxWt, maxWtAtOD);
@@ -371,7 +376,6 @@ export default function RolledCoilCalculator() {
       const rotPcs = ctlAnyOrientation && pieceL <= masterWidth ? Math.floor(masterWidth / pieceL) : 0;
       const rotTrim = rotPcs > 0 ? masterWidth - rotPcs * pieceL : masterWidth - pieceL;
       const tooNarrow = pieceW > masterWidth && (!ctlAnyOrientation || pieceL > masterWidth);
-      const trimTooLarge = !tooNarrow;
       let reason = tooNarrow
         ? `Piece doesn't fit — need at least ${Math.min(pieceW, ctlAnyOrientation ? pieceL : pieceW)}" wide master`
         : `Edge drop too large: normal ${normalTrim.toFixed(3)}" ${ctlAnyOrientation ? `/ rotated ${rotTrim.toFixed(3)}"` : ""} (max 8")`;
