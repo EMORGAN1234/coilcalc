@@ -4,7 +4,7 @@ const PI = Math.PI;
 
 const ALLOYS = [
   { id: "1100", label: "1100", density: 0.0975 },
-  { id: "3003", label: "3003", density: 0.0990 },
+  { id: "3003", label: "3003", density: 0.0984 },
   { id: "3004", label: "3004", density: 0.0984 },
   { id: "3105", label: "3105", density: 0.0985 },
   { id: "5005", label: "5005", density: 0.0974 },
@@ -110,10 +110,15 @@ function coilFeet(weightLbs, widthIn, gaugeIn, densityLbIn3) {
 }
 
 // lbs per linear foot
+// lbs per linear foot
 function lbsPerFt(widthIn, gaugeIn, densityLbIn3) {
   return widthIn * gaugeIn * densityLbIn3 * 12;
 }
 
+// OD sanity check — computed OD must be meaningfully larger than core ID
+function coilODValid(od, coreIDin) {
+  return od > coreIDin + 0.25;
+}
 export default function RolledCoilCalculator() {
   // ── SHARED MATERIAL ──────────────────────────────────────────
   const [mode, setMode] = useState("slit"); // "slit" | "ctl" | "info"
@@ -163,6 +168,7 @@ export default function RolledCoilCalculator() {
   const density = alloy.density;
   const gaugeNum = parseFloat(gauge) || 0;
   const gaugeOver = gaugeNum > 0.325;
+  const gaugeUnder = gaugeNum > 0 && gaugeNum < 0.006;
   const coreIn = parseFloat(coreID) || 20;
 
   // ═══════════════════════════════════════════════════════
@@ -175,7 +181,7 @@ export default function RolledCoilCalculator() {
     const htF = ht / 100;
     const shLen = parseFloat(sheetLength) || 0;
 
-    if (!sw || sw <= 0 || !g || g <= 0 || g > 0.325) return null;
+    if (!sw || sw <= 0 || !g || g < 0.006 || g > 0.325) return null;
 
     const results = STANDARD_WIDTHS.map((mw) => {
       const numSlits = Math.floor(mw / sw);
@@ -269,12 +275,12 @@ export default function RolledCoilCalculator() {
       let fullCoilsPerSlit = 1, pupWtPerSlit = 0, coilsPerSlit = 1;
       let fullSlitCoilOD = 0, pupSlitCoilOD = 0;
 
-      if (coilSizeLimit > 0 && slitCoilWt > coilSizeLimit) {
-        fullCoilsPerSlit = Math.floor(slitCoilWt / coilSizeLimit);
-        pupWtPerSlit = slitCoilWt - fullCoilsPerSlit * coilSizeLimit;
-        coilsPerSlit = fullCoilsPerSlit + (pupWtPerSlit > 0.01 ? 1 : 0);
-        fullSlitCoilOD = coilOD(coilSizeLimit, sw, density, coreIn);
-        if (pupWtPerSlit > 0.01) pupSlitCoilOD = coilOD(pupWtPerSlit, sw, density, coreIn);
+    if (coilSizeLimit > 0 && slitCoilWt > coilSizeLimit) {
+  fullCoilsPerSlit = Math.floor(slitCoilWt / coilSizeLimit);
+  pupWtPerSlit = slitCoilWt - fullCoilsPerSlit * coilSizeLimit;
+  coilsPerSlit = fullCoilsPerSlit + (pupWtPerSlit >= 100 ? 1 : 0);
+  fullSlitCoilOD = coilOD(coilSizeLimit, sw, density, coreIn);
+  if (pupWtPerSlit >= 100) pupSlitCoilOD = coilOD(pupWtPerSlit, sw, density, coreIn);
       } else {
         fullSlitCoilOD = coilOD(slitCoilWt, sw, density, coreIn);
       }
@@ -307,7 +313,7 @@ export default function RolledCoilCalculator() {
   // ═══════════════════════════════════════════════════════
   function calcCTLOption(masterWidth, pieceW, pieceL, ctlScrapPct) {
     const g = gaugeNum;
-    if (!masterWidth || masterWidth < 30 || pieceW <= 0 || pieceL <= 0 || g <= 0 || g > 0.325) return null;
+    if (!masterWidth || masterWidth < 30 || pieceW <= 0 || pieceL <= 0 || g < 0.006 || g > 0.325) return null;
 
     const ctlF = (parseFloat(ctlScrapPct) || 0) / 100;
 
@@ -493,13 +499,15 @@ export default function RolledCoilCalculator() {
     const sqFt = (w * ft * 12) / 144;
     const lpSqFt = density * g * 144;
 
-    return {
-      ft, inches: ft * 12, meters: ft * 0.3048,
-      sqFt, lpf, lbsPerIn: lpf / 12, lpSqFt,
-      kgPerMeter: lpf * 1.48816,
-      od, odMM: od * 25.4,
-      coreBuildup: (od - coreIn) / 2,
-    };
+    const odValid = coilODValid(od, coreIn);
+return {
+  ft, inches: ft * 12, meters: ft * 0.3048,
+  sqFt, lpf, lbsPerIn: lpf / 12, lpSqFt,
+  kgPerMeter: lpf * 1.48816,
+  od, odMM: od * 25.4,
+  coreBuildup: (od - coreIn) / 2,
+  odValid,
+};
   }, [infoWidth, infoWeight, gaugeNum, density, coreIn]);
 
   // ── SAVE ──────────────────────────────────────────────
@@ -760,9 +768,9 @@ export default function RolledCoilCalculator() {
         {htNum === 0 && (
           <p style={{ fontSize: 10, color: "#f59e0b", marginTop: 10 }}>⚠ Heads/tails scrap is 0% — update if applicable</p>
         )}
-        <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
-          Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({htNum}%) — combined multiplicatively.
-        </p>
+       <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
+  Total scrap combines edge drop/trim ({fmt(best.trimPct, 2)}%) and CTL process loss ({best.ctlScrapPct.toFixed(1)}%) — multiplicative. Process scrap is distributed proportionally; actual end-crop loss may be higher on short runs.
+</p>
       </div>
     );
   }
@@ -877,8 +885,9 @@ export default function RolledCoilCalculator() {
               </div>
               <div>
                 <label style={S.lbl}>Gauge (")</label>
-                <input type="number" step="0.001" value={gauge} onChange={(e) => setGauge(e.target.value)} style={gaugeOver ? S.inpErr : S.inp} placeholder="0.032" />
+                <input type="number" step="0.001" value={gauge} onChange={(e) => setGauge(e.target.value)} style={(gaugeOver || gaugeUnder) ? S.inpErr : S.inp} placeholder="0.032" />
                 {gaugeOver && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 4, fontWeight: 600 }}>⚠ Max gauge is 0.325"</p>}
+                {gaugeUnder && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 4, fontWeight: 600 }}>⚠ Min gauge is 0.006"</p>}
               </div>
               <div>
                 <label style={S.lbl}>Core ID (")</label>
@@ -951,11 +960,13 @@ export default function RolledCoilCalculator() {
             {renderStockInputCard()}
 
             {/* Gauge warning */}
-            {gaugeOver && (
-              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-                <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>⛔ Gauge exceeds maximum (0.325") — calculations suppressed until corrected.</p>
-              </div>
-            )}
+            {(gaugeOver || gaugeUnder) && (
+  <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+    <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
+      {gaugeOver ? "⛔ Gauge exceeds maximum (0.325\") — calculations suppressed until corrected." : "⛔ Gauge below minimum (0.006\") — calculations suppressed until corrected."}
+    </p>
+  </div>
+)}
 
             {/* Standard Master Width Options */}
             {!gaugeOver && slitCalc && (
@@ -1155,7 +1166,8 @@ export default function RolledCoilCalculator() {
                   <div style={{ ...metricBox(true), gridColumn: "span 2" }}>
                     <p style={{ fontSize: 9, fontWeight: 700, color: "#737373", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>Coil OD</p>
                     <p style={{ fontSize: 36, fontWeight: 800, color: "#dc2626", margin: 0, letterSpacing: "-1px" }}>{fmt(coilInfo.od, 2)}"</p>
-                    <p style={{ fontSize: 11, color: "#a3a3a3", marginTop: 4 }}>{fmt(coilInfo.odMM, 1)} mm &nbsp;·&nbsp; {fmt(coilInfo.coreBuildup, 3)}" buildup/side</p>
+<p style={{ fontSize: 11, color: "#a3a3a3", marginTop: 4 }}>{fmt(coilInfo.odMM, 1)} mm &nbsp;·&nbsp; {fmt(coilInfo.coreBuildup, 3)}" buildup/side</p>
+{!coilInfo.odValid && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 6, fontWeight: 600 }}>⚠ Computed OD is less than 0.25" above core ID — check weight and core size inputs.</p>}
                   </div>
                 </div>
                 <div className="rcc-grid4">
