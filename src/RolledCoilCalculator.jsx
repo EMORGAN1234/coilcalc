@@ -959,7 +959,7 @@ return {
             {/* In-Stock Master Coil */}
             {renderStockInputCard()}
 
-            {/* Gauge warning */}
+          {/* Gauge warning */}
             {(gaugeOver || gaugeUnder) && (
               <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
                 <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
