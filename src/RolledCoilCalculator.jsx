@@ -961,13 +961,12 @@ return {
 
             {/* Gauge warning */}
             {(gaugeOver || gaugeUnder) && (
-{(gaugeOver || gaugeUnder) && (
-  <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-    <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
-      {gaugeOver ? "⛔ Gauge exceeds maximum (0.325\") — calculations suppressed until corrected." : "⛔ Gauge below minimum (0.006\") — calculations suppressed until corrected."}
-    </p>
-  </div>
-)}
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
+                  {gaugeOver ? "⛔ Gauge exceeds maximum (0.325\") — calculations suppressed until corrected." : "⛔ Gauge below minimum (0.006\") — calculations suppressed until corrected."}
+                </p>
+              </div>
+            )}
 
             {/* Standard Master Width Options */}
             {!gaugeOver && slitCalc && (
