@@ -97,46 +97,39 @@ function StatBox({ label, value, sub, green, accent, warn }) {
   );
 }
 
-// Coil OD formula: OD = sqrt(ID² + 4W/(π·ρ·width_in))
 function coilOD(weightLbs, widthIn, densityLbIn3, coreIDin) {
   if (weightLbs <= 0 || widthIn <= 0 || densityLbIn3 <= 0 || coreIDin <= 0) return 0;
   return Math.sqrt(coreIDin * coreIDin + (4 * weightLbs) / (PI * densityLbIn3 * widthIn));
 }
 
-// Linear footage: ft = W / (width × gauge × density × 12)
 function coilFeet(weightLbs, widthIn, gaugeIn, densityLbIn3) {
   if (weightLbs <= 0 || widthIn <= 0 || gaugeIn <= 0 || densityLbIn3 <= 0) return 0;
   return weightLbs / (widthIn * gaugeIn * densityLbIn3 * 12);
 }
 
-// lbs per linear foot
-// lbs per linear foot
 function lbsPerFt(widthIn, gaugeIn, densityLbIn3) {
   return widthIn * gaugeIn * densityLbIn3 * 12;
 }
 
-// OD sanity check — computed OD must be meaningfully larger than core ID
 function coilODValid(od, coreIDin) {
   return od > coreIDin + 0.25;
 }
+
 export default function RolledCoilCalculator() {
-  // ── SHARED MATERIAL ──────────────────────────────────────────
-  const [mode, setMode] = useState("slit"); // "slit" | "ctl" | "info"
+  const [mode, setMode] = useState("slit");
   const [alloyId, setAlloyId] = useState("5052");
   const [temper, setTemper] = useState("H32");
   const [gauge, setGauge] = useState("");
   const [coreID, setCoreID] = useState("20");
 
-  // ── SLIT PLANNER ─────────────────────────────────────────────
   const [slitWidth, setSlitWidth] = useState("");
   const [headsTails, setHeadsTails] = useState("2");
   const [orderVal, setOrderVal] = useState("");
-  const [orderUnit, setOrderUnit] = useState("lbs"); // lbs | pcs | ft
+  const [orderUnit, setOrderUnit] = useState("lbs");
   const [sheetLength, setSheetLength] = useState("");
   const [maxCoilWt, setMaxCoilWt] = useState("");
   const [maxCoilOD, setMaxCoilOD] = useState("");
 
-  // ── CTL PLANNER ──────────────────────────────────────────────
   const [ctlPieceWidth, setCtlPieceWidth] = useState("");
   const [ctlPieceLength, setCtlPieceLength] = useState("");
   const [ctlScrap, setCtlScrap] = useState("2");
@@ -146,24 +139,16 @@ export default function RolledCoilCalculator() {
   const [ctlQtyLbs, setCtlQtyLbs] = useState("");
   const [ctlQtyFt2, setCtlQtyFt2] = useState("");
 
-  // ── COIL INFO ─────────────────────────────────────────────────
   const [infoWidth, setInfoWidth] = useState("");
   const [infoWeight, setInfoWeight] = useState("");
 
-  // ── STOCK COILS (shared across slit + CTL) ───────────────────
-  const [stockCoils, setStockCoils] = useState([
-    { width: "", weight: "", tag: "" },
-  ]);
-
-  // ── HISTORY ──────────────────────────────────────────────────
+  const [stockCoils, setStockCoils] = useState([{ width: "", weight: "", tag: "" }]);
   const [history, setHistory] = useState([]);
 
-  // ── AUTO-TEMPER ──────────────────────────────────────────────
   useEffect(() => {
     if (DEFAULT_TEMPERS[alloyId]) setTemper(DEFAULT_TEMPERS[alloyId]);
   }, [alloyId]);
 
-  // ── DERIVED MATERIAL ─────────────────────────────────────────
   const alloy = ALLOYS.find((a) => a.id === alloyId) || ALLOYS[5];
   const density = alloy.density;
   const gaugeNum = parseFloat(gauge) || 0;
@@ -171,9 +156,6 @@ export default function RolledCoilCalculator() {
   const gaugeUnder = gaugeNum > 0 && gaugeNum < 0.006;
   const coreIn = parseFloat(coreID) || 20;
 
-  // ═══════════════════════════════════════════════════════
-  // SLIT CALC
-  // ═══════════════════════════════════════════════════════
   const slitCalc = useMemo(() => {
     const sw = parseFloat(slitWidth) || 0;
     const g = gaugeNum;
@@ -194,9 +176,7 @@ export default function RolledCoilCalculator() {
       const scrapPct = (1 - totalYield) * 100;
       const lbsPerFtVal = lbsPerFt(sw, g, density);
 
-      let orderLbs = 0;
-      let orderFt = 0;
-      let orderPcs = 0;
+      let orderLbs = 0, orderFt = 0, orderPcs = 0;
       const ov = parseFloat(orderVal) || 0;
       if (ov > 0) {
         if (orderUnit === "lbs") {
@@ -234,9 +214,6 @@ export default function RolledCoilCalculator() {
     return { results, best };
   }, [slitWidth, gaugeNum, headsTails, orderVal, orderUnit, sheetLength, density]);
 
-  // ═══════════════════════════════════════════════════════
-  // STOCK ANALYSIS — SLIT
-  // ═══════════════════════════════════════════════════════
   const slitStockAnalysis = useMemo(() => {
     if (!slitCalc || gaugeOver) return [];
     const sw = parseFloat(slitWidth) || 0;
@@ -275,12 +252,12 @@ export default function RolledCoilCalculator() {
       let fullCoilsPerSlit = 1, pupWtPerSlit = 0, coilsPerSlit = 1;
       let fullSlitCoilOD = 0, pupSlitCoilOD = 0;
 
-    if (coilSizeLimit > 0 && slitCoilWt > coilSizeLimit) {
-  fullCoilsPerSlit = Math.floor(slitCoilWt / coilSizeLimit);
-  pupWtPerSlit = slitCoilWt - fullCoilsPerSlit * coilSizeLimit;
-  coilsPerSlit = fullCoilsPerSlit + (pupWtPerSlit >= 100 ? 1 : 0);
-  fullSlitCoilOD = coilOD(coilSizeLimit, sw, density, coreIn);
-  if (pupWtPerSlit >= 100) pupSlitCoilOD = coilOD(pupWtPerSlit, sw, density, coreIn);
+      if (coilSizeLimit > 0 && slitCoilWt > coilSizeLimit) {
+        fullCoilsPerSlit = Math.floor(slitCoilWt / coilSizeLimit);
+        pupWtPerSlit = slitCoilWt - fullCoilsPerSlit * coilSizeLimit;
+        coilsPerSlit = fullCoilsPerSlit + (pupWtPerSlit >= 100 ? 1 : 0);
+        fullSlitCoilOD = coilOD(coilSizeLimit, sw, density, coreIn);
+        if (pupWtPerSlit >= 100) pupSlitCoilOD = coilOD(pupWtPerSlit, sw, density, coreIn);
       } else {
         fullSlitCoilOD = coilOD(slitCoilWt, sw, density, coreIn);
       }
@@ -308,9 +285,6 @@ export default function RolledCoilCalculator() {
     });
   }, [stockCoils, slitWidth, gaugeNum, headsTails, maxCoilWt, maxCoilOD, coreIn, density, slitCalc, gaugeOver]);
 
-  // ═══════════════════════════════════════════════════════
-  // CTL CALC
-  // ═══════════════════════════════════════════════════════
   function calcCTLOption(masterWidth, pieceW, pieceL, ctlScrapPct) {
     const g = gaugeNum;
     if (!masterWidth || masterWidth < 30 || pieceW <= 0 || pieceL <= 0 || g < 0.006 || g > 0.325) return null;
@@ -330,11 +304,8 @@ export default function RolledCoilCalculator() {
       return { piecesAcross, trimIn, trimPct, ctlScrapPct: ctlF * 100, totalYield: totalYield * 100, scrapPct, pw, pl };
     };
 
-    const normalGrainDir = "length";
-    const rotatedGrainDir = "width";
-
-    const normalOk = ctlGrainReq === "none" || ctlGrainReq === normalGrainDir;
-    const rotatedOk = (ctlGrainReq === "none" || ctlGrainReq === rotatedGrainDir) && ctlAnyOrientation;
+    const normalOk = ctlGrainReq === "none" || ctlGrainReq === "length";
+    const rotatedOk = (ctlGrainReq === "none" || ctlGrainReq === "width") && ctlAnyOrientation;
 
     let result = normalOk ? tryLayout(pieceW, pieceL) : null;
     let resultRot = rotatedOk ? tryLayout(pieceL, pieceW) : null;
@@ -357,7 +328,7 @@ export default function RolledCoilCalculator() {
       const rotPcs = ctlAnyOrientation && pieceL <= masterWidth ? Math.floor(masterWidth / pieceL) : 0;
       const rotTrim = rotPcs > 0 ? masterWidth - rotPcs * pieceL : masterWidth - pieceL;
       const tooNarrow = pieceW > masterWidth && (!ctlAnyOrientation || pieceL > masterWidth);
-      let reason = tooNarrow
+      const reason = tooNarrow
         ? `Piece doesn't fit — need at least ${Math.min(pieceW, ctlAnyOrientation ? pieceL : pieceW)}" wide master`
         : `Edge drop too large: normal ${normalTrim.toFixed(3)}" ${ctlAnyOrientation ? `/ rotated ${rotTrim.toFixed(3)}"` : ""} (max 8")`;
       return { valid: false, reason };
@@ -366,17 +337,14 @@ export default function RolledCoilCalculator() {
     const { piecesAcross, trimIn, trimPct, ctlScrapPct: ctlS, totalYield, scrapPct } = result;
     const cutLength = result.pl;
     const lbsPerFtMaster = lbsPerFt(masterWidth, gaugeNum, density);
-
     const pcWt = result.pw * result.pl * gaugeNum * density;
+
     let orderPcs = 0, orderLbs = 0, orderFt2 = 0;
     const pv = parseFloat(ctlQtyPcs) || 0;
     if (pv > 0) { orderPcs = pv; orderLbs = pv * pcWt; orderFt2 = pv * (result.pw * result.pl / 144); }
 
     const cutsNeeded = orderPcs > 0 ? Math.ceil(orderPcs / piecesAcross) : 0;
-    // FIX #3: use ctlF (already parsed from ctlScrapPct param) instead of re-parsing ctlScrap state
-    const masterFtNeeded = cutsNeeded > 0
-      ? (cutsNeeded * cutLength) / (12 * (1 - ctlF))
-      : 0;
+    const masterFtNeeded = cutsNeeded > 0 ? (cutsNeeded * cutLength) / (12 * (1 - ctlF)) : 0;
     const masterLbsNeeded = masterFtNeeded * lbsPerFtMaster;
 
     return {
@@ -404,7 +372,6 @@ export default function RolledCoilCalculator() {
     return { results, best };
   }, [ctlPieceWidth, ctlPieceLength, ctlScrap, ctlAnyOrientation, ctlGrainReq, gaugeNum, gaugeOver, ctlQtyPcs, density]);
 
-  // CTL piece weight for qty sync
   const ctlPcWt = useMemo(() => {
     const pw = parseFloat(ctlPieceWidth) || 0;
     const pl = parseFloat(ctlPieceLength) || 0;
@@ -420,10 +387,8 @@ export default function RolledCoilCalculator() {
     if (field === "pcs") {
       setCtlQtyPcs(val);
       const n = parseFloat(val) || 0;
-      if (pcWt > 0 && n > 0) setCtlQtyLbs((n * pcWt).toFixed(1));
-      else setCtlQtyLbs("");
-      if (pcFt2 > 0 && n > 0) setCtlQtyFt2((n * pcFt2).toFixed(2));
-      else setCtlQtyFt2("");
+      if (pcWt > 0 && n > 0) setCtlQtyLbs((n * pcWt).toFixed(1)); else setCtlQtyLbs("");
+      if (pcFt2 > 0 && n > 0) setCtlQtyFt2((n * pcFt2).toFixed(2)); else setCtlQtyFt2("");
     } else if (field === "lbs") {
       setCtlQtyLbs(val);
       const n = parseFloat(val) || 0;
@@ -437,12 +402,8 @@ export default function RolledCoilCalculator() {
     }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // CTL STOCK ANALYSIS
-  // ═══════════════════════════════════════════════════════
   const ctlStockAnalysis = useMemo(() => {
     if (!ctlCalc || !ctlCalc.best || gaugeOver) return [];
-    const best = ctlCalc.best;
     const orderPcs = parseFloat(ctlQtyPcs) || 0;
 
     return stockCoils.map((sc) => {
@@ -470,7 +431,6 @@ export default function RolledCoilCalculator() {
       const leftoverFt = orderPcs > 0 ? Math.max(0, masterFt - ftNeeded) : masterFt;
       const leftoverLbs = leftoverFt * lbsPerFtCoil;
       const pcsFromThisCoil = orderPcs > 0 ? Math.min(pcsAvail, orderPcs) : pcsAvail;
-
       const masterOD = coilOD(scWt, scW, density, coreIn);
 
       return {
@@ -484,9 +444,6 @@ export default function RolledCoilCalculator() {
     });
   }, [stockCoils, ctlCalc, ctlQtyPcs, ctlPieceWidth, ctlPieceLength, ctlScrap, gaugeNum, density, coreIn, gaugeOver]);
 
-  // ═══════════════════════════════════════════════════════
-  // COIL INFO
-  // ═══════════════════════════════════════════════════════
   const coilInfo = useMemo(() => {
     const w = parseFloat(infoWidth) || 0;
     const wt = parseFloat(infoWeight) || 0;
@@ -498,46 +455,30 @@ export default function RolledCoilCalculator() {
     const od = coilOD(wt, w, density, coreIn);
     const sqFt = (w * ft * 12) / 144;
     const lpSqFt = density * g * 144;
-
     const odValid = coilODValid(od, coreIn);
-return {
-  ft, inches: ft * 12, meters: ft * 0.3048,
-  sqFt, lpf, lbsPerIn: lpf / 12, lpSqFt,
-  kgPerMeter: lpf * 1.48816,
-  od, odMM: od * 25.4,
-  coreBuildup: (od - coreIn) / 2,
-  odValid,
-};
+
+    return {
+      ft, inches: ft * 12, meters: ft * 0.3048,
+      sqFt, lpf, lbsPerIn: lpf / 12, lpSqFt,
+      kgPerMeter: lpf * 1.48816,
+      od, odMM: od * 25.4,
+      coreBuildup: (od - coreIn) / 2,
+      odValid,
+    };
   }, [infoWidth, infoWeight, gaugeNum, density, coreIn]);
 
-  // ── SAVE ──────────────────────────────────────────────
   function saveCalc() {
     if (mode === "slit" && slitCalc?.best) {
-      setHistory((h) => [{
-        id: Date.now(), mode: "Slit",
-        label: `${slitWidth}" slit from ${slitCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`,
-        detail: `Scrap ${fmt(slitCalc.best.scrapPct, 2)}% · ${slitCalc.best.numSlits} slits · H/T ${headsTails}%`,
-      }, ...h].slice(0, 20));
+      setHistory((h) => [{ id: Date.now(), mode: "Slit", label: `${slitWidth}" slit from ${slitCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`, detail: `Scrap ${fmt(slitCalc.best.scrapPct, 2)}% · ${slitCalc.best.numSlits} slits · H/T ${headsTails}%` }, ...h].slice(0, 20));
     } else if (mode === "ctl" && ctlCalc?.best) {
-      setHistory((h) => [{
-        id: Date.now(), mode: "CTL",
-        label: `${ctlPieceWidth}"×${ctlPieceLength}" sheet from ${ctlCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`,
-        detail: `Scrap ${fmt(ctlCalc.best.scrapPct, 2)}% · ${ctlCalc.best.piecesAcross} across`,
-      }, ...h].slice(0, 20));
+      setHistory((h) => [{ id: Date.now(), mode: "CTL", label: `${ctlPieceWidth}"×${ctlPieceLength}" sheet from ${ctlCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`, detail: `Scrap ${fmt(ctlCalc.best.scrapPct, 2)}% · ${ctlCalc.best.piecesAcross} across` }, ...h].slice(0, 20));
     } else if (mode === "info" && coilInfo) {
-      setHistory((h) => [{
-        id: Date.now(), mode: "Info",
-        label: `${infoWidth}"×${gauge}" ${alloyId}-${temper} @ ${infoWeight} lbs`,
-        detail: `${fmt(coilInfo.ft, 1)} ft · OD ${fmt(coilInfo.od, 2)}"`,
-      }, ...h].slice(0, 20));
+      setHistory((h) => [{ id: Date.now(), mode: "Info", label: `${infoWidth}"×${gauge}" ${alloyId}-${temper} @ ${infoWeight} lbs`, detail: `${fmt(coilInfo.ft, 1)} ft · OD ${fmt(coilInfo.od, 2)}"` }, ...h].slice(0, 20));
     }
   }
 
   const canSave = (mode === "slit" && !!slitCalc?.best) || (mode === "ctl" && !!ctlCalc?.best) || (mode === "info" && !!coilInfo);
 
-  // ─────────────────────────────────────────────────────
-  // RENDER HELPERS
-  // ─────────────────────────────────────────────────────
   const tabBtn = (id, label) => (
     <button onClick={() => setMode(id)} style={{ ...btnStyle(mode === id), padding: "8px 18px", fontSize: 12 }}>{label}</button>
   );
@@ -546,12 +487,9 @@ return {
     const isBest = best && r.mw === best.mw;
     const border = !r.valid ? "1px solid #e5e5e5" : isBest ? "2px solid #dc2626" : "1px solid #e5e5e5";
     const bg = !r.valid ? "#fafafa" : isBest ? "linear-gradient(135deg,#fef2f2,#fff)" : "linear-gradient(135deg,#fafafa,#fff)";
-
     return (
       <div key={r.mw} style={{ borderRadius: 14, border, background: bg, padding: 16, position: "relative" }}>
-        {isBest && (
-          <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>★ BEST</div>
-        )}
+        {isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>★ BEST</div>}
         <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
         {!r.valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{r.reason}</p>
@@ -562,13 +500,9 @@ return {
               { l: "Edge Offal", v: `${fmt(r.offalIn, 3)}" (${fmt(r.offalPct, 1)}%)` },
               { l: "Slit Yield", v: `${fmt(r.slitYield, 2)}%` },
               { l: "Heads/Tails Scrap", v: `${headsTails}%`, dim: true },
-              // FIX #2: label changed from "Total Scrap (edge + H/T)" to "Total Scrap (combined)"
               { l: "Total Scrap (combined)", v: `${fmt(r.scrapPct, 2)}%`, accent: true },
               { l: "lbs / ft (slit)", v: fmt(r.lbsPerFtVal, 4) },
-              ...(r.masterLbsNeeded > 0 ? [
-                { l: "Master lbs needed", v: `${fmt(r.masterLbsNeeded, 0)} lbs`, bold: true },
-                { l: "Master ft needed", v: `${fmt(r.masterFtNeeded, 1)} ft` },
-              ] : []),
+              ...(r.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(r.masterLbsNeeded, 0)} lbs`, bold: true }, { l: "Master ft needed", v: `${fmt(r.masterFtNeeded, 1)} ft` }] : []),
               ...(r.sheetWt > 0 ? [{ l: "Sheet wt (each)", v: `${fmt(r.sheetWt, 3)} lbs` }] : []),
               ...(r.orderPcs > 0 ? [{ l: "Sheets / pcs", v: String(r.orderPcs) }] : []),
             ].map((row, i) => (
@@ -587,15 +521,10 @@ return {
     const isBest = best && r.mw === best.mw;
     const border = !r.valid ? "1px solid #e5e5e5" : isBest ? "2px solid #dc2626" : "1px solid #e5e5e5";
     const bg = !r.valid ? "#fafafa" : isBest ? "linear-gradient(135deg,#fef2f2,#fff)" : "linear-gradient(135deg,#fafafa,#fff)";
-
     return (
       <div key={r.mw} style={{ borderRadius: 14, border, background: bg, padding: 16, position: "relative" }}>
-        {isBest && (
-          <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>★ BEST</div>
-        )}
-        {r.rotated && (
-          <div style={{ position: "absolute", top: isBest ? 32 : 10, right: 10, background: "#171717", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>↔ ROTATED</div>
-        )}
+        {isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>★ BEST</div>}
+        {r.rotated && <div style={{ position: "absolute", top: isBest ? 32 : 10, right: 10, background: "#171717", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>↔ ROTATED</div>}
         <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
         {!r.valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{r.reason}</p>
@@ -609,11 +538,7 @@ return {
               { l: "CTL Process Scrap", v: `${r.ctlScrapPct.toFixed(1)}%`, dim: true },
               { l: "Total Scrap (trim + CTL)", v: `${fmt(r.scrapPct, 2)}%`, accent: true },
               { l: "Total Yield", v: `${fmt(r.totalYield, 2)}%` },
-              ...(r.cutsNeeded > 0 ? [
-                { l: "Cuts Needed", v: String(r.cutsNeeded), bold: true },
-                { l: "Master ft needed", v: `${fmt(r.masterFtNeeded, 1)} ft` },
-                { l: "Master lbs needed", v: `${fmt(r.masterLbsNeeded, 0)} lbs`, bold: true },
-              ] : []),
+              ...(r.cutsNeeded > 0 ? [{ l: "Cuts Needed", v: String(r.cutsNeeded), bold: true }, { l: "Master ft needed", v: `${fmt(r.masterFtNeeded, 1)} ft` }, { l: "Master lbs needed", v: `${fmt(r.masterLbsNeeded, 0)} lbs`, bold: true }] : []),
             ].map((row, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f0f0", paddingBottom: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: row.dim ? "#a3a3a3" : "#525252", textTransform: "uppercase", letterSpacing: "0.4px" }}>{row.l}</span>
@@ -630,42 +555,25 @@ return {
     const isSlitMode = mode === "slit";
     const analysis = isSlitMode ? slitStockAnalysis[i] : ctlStockAnalysis[i];
     if (!analysis) return null;
-
     const { valid } = analysis;
-    const hasOrder = isSlitMode
-      ? (parseFloat(orderVal) > 0)
-      : (parseFloat(ctlQtyPcs) > 0);
-
-    const cardBg = !valid ? "#fafafa"
-      : analysis.canFulfill === true ? "linear-gradient(135deg,#f0fdf4,#fff)"
-        : analysis.canFulfill === false ? "linear-gradient(135deg,#fffbeb,#fff)"
-          : "linear-gradient(135deg,#fafafa,#fff)";
-    const cardBorder = !valid ? "1px solid #e5e5e5"
-      : analysis.canFulfill === true ? "2px solid #16a34a"
-        : analysis.canFulfill === false ? "2px solid #f59e0b"
-          : "1px solid #e5e5e5";
+    const hasOrder = isSlitMode ? (parseFloat(orderVal) > 0) : (parseFloat(ctlQtyPcs) > 0);
+    const cardBg = !valid ? "#fafafa" : analysis.canFulfill === true ? "linear-gradient(135deg,#f0fdf4,#fff)" : analysis.canFulfill === false ? "linear-gradient(135deg,#fffbeb,#fff)" : "linear-gradient(135deg,#fafafa,#fff)";
+    const cardBorder = !valid ? "1px solid #e5e5e5" : analysis.canFulfill === true ? "2px solid #16a34a" : analysis.canFulfill === false ? "2px solid #f59e0b" : "1px solid #e5e5e5";
 
     return (
       <div key={i} style={{ borderRadius: 14, border: cardBorder, background: cardBg, padding: 16, marginBottom: 12 }}>
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
           <div>
-            {/* FIX #4: wrap scWt in fmt() to avoid raw float display */}
             <p style={{ fontSize: 16, fontWeight: 800, color: "#171717", margin: 0 }}>
-              {analysis.scW || "?"}″ wide · {analysis.scWt ? fmt(analysis.scWt, 0) : "?"}  lbs
+              {analysis.scW || "?"}″ wide · {analysis.scWt ? fmt(analysis.scWt, 0) : "?"} lbs
             </p>
             {sc.tag && <p style={{ fontSize: 11, color: "#737373", margin: "2px 0 0", fontWeight: 600 }}>TAG: {sc.tag}</p>}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {analysis.canFulfill === true && hasOrder && (
-              <span style={{ background: "linear-gradient(135deg,#16a34a,#15803d)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>✓ COVERS ORDER</span>
-            )}
-            {analysis.canFulfill === false && hasOrder && (
-              <span style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>⚠ SHORT</span>
-            )}
+            {analysis.canFulfill === true && hasOrder && <span style={{ background: "linear-gradient(135deg,#16a34a,#15803d)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>✓ COVERS ORDER</span>}
+            {analysis.canFulfill === false && hasOrder && <span style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>⚠ SHORT</span>}
           </div>
         </div>
-
         {!valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{analysis.reason}</p>
         ) : isSlitMode ? (
@@ -740,9 +648,6 @@ return {
     );
   }
 
-  // ─────────────────────────────────────────────────────
-  // RENDER SUMMARY BAR
-  // ─────────────────────────────────────────────────────
   function renderSlitSummaryBar(best) {
     const htNum = parseFloat(headsTails) || 0;
     const rows = [
@@ -765,12 +670,10 @@ return {
             </div>
           ))}
         </div>
-        {htNum === 0 && (
-          <p style={{ fontSize: 10, color: "#f59e0b", marginTop: 10 }}>⚠ Heads/tails scrap is 0% — update if applicable</p>
-        )}
-       <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
-  Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({parseFloat(headsTails) || 0}%) — combined multiplicatively.
-</p>
+        {htNum === 0 && <p style={{ fontSize: 10, color: "#f59e0b", marginTop: 10 }}>⚠ Heads/tails scrap is 0% — update if applicable</p>}
+        <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
+          Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({parseFloat(headsTails) || 0}%) — combined multiplicatively.
+        </p>
       </div>
     );
   }
@@ -800,23 +703,19 @@ return {
             </div>
           ))}
         </div>
-       <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
-  Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({parseFloat(headsTails) || 0}%) — combined multiplicatively.
-</p>
+        <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
+          Scrap rate includes both edge offal ({fmt(best.trimPct, 2)}%) and CTL process scrap ({best.ctlScrapPct.toFixed(1)}%) — combined multiplicatively.
+        </p>
       </div>
     );
   }
 
-  // ─────────────────────────────────────────────────────
-  // STOCK COIL INPUT SECTION (shared)
-  // ─────────────────────────────────────────────────────
   function renderStockInputCard() {
     return (
       <div className="rcc-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <p style={S.sec}><span style={S.dotGray}></span>In-Stock Master Coil</p>
-          <button onClick={() => setStockCoils([...stockCoils, { width: "", weight: "", tag: "" }])}
-            style={{ ...btnStyle(false), fontSize: 11 }}>+ Add Coil</button>
+          <button onClick={() => setStockCoils([...stockCoils, { width: "", weight: "", tag: "" }])} style={{ ...btnStyle(false), fontSize: 11 }}>+ Add Coil</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {stockCoils.map((sc, i) => (
@@ -834,8 +733,7 @@ return {
                 <input type="text" value={sc.tag} onChange={(e) => { const u = [...stockCoils]; u[i].tag = e.target.value; setStockCoils(u); }} style={S.inp} placeholder="Heat #, lot, location…" />
               </div>
               <div style={{ display: "flex", alignItems: "flex-end" }}>
-                <button onClick={() => setStockCoils(stockCoils.filter((_, idx) => idx !== i))}
-                  style={{ width: 36, height: 36, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontFamily: font }}>✕</button>
+                <button onClick={() => setStockCoils(stockCoils.filter((_, idx) => idx !== i))} style={{ width: 36, height: 36, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontFamily: font }}>✕</button>
               </div>
             </div>
           ))}
@@ -844,15 +742,12 @@ return {
     );
   }
 
-  // ─────────────────────────────────────────────────────
-  // MAIN RENDER
-  // ─────────────────────────────────────────────────────
   return (
     <div className="rcc-page">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="rcc-wrap">
 
-        {/* ── HEADER ─────────────────────────────────────────── */}
+        {/* HEADER */}
         <div className="rcc-card-accent">
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: "linear-gradient(135deg,#dc2626,#991b1b)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 12px rgba(220,38,38,0.4)", flexShrink: 0 }}>
@@ -869,7 +764,6 @@ return {
             </div>
           </div>
 
-          {/* Material Inputs */}
           <div className="rcc-inner" style={{ marginBottom: 16 }}>
             <p style={{ ...S.sec, marginBottom: 12 }}><span style={S.dot}></span>Material</p>
             <div className="rcc-grid4">
@@ -896,7 +790,6 @@ return {
             </div>
           </div>
 
-          {/* Mode Tabs + Save */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <div style={{ display: "flex", gap: 8 }}>
               {tabBtn("slit", "✂ Slit Coil Planner")}
@@ -907,12 +800,9 @@ return {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════ */}
         {/* SLIT MODE */}
-        {/* ══════════════════════════════════════════════════ */}
         {mode === "slit" && (
           <>
-            {/* Customer Requirements */}
             <div className="rcc-card">
               <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Customer Requirements</p>
               <div className="rcc-grid4">
@@ -956,9 +846,8 @@ return {
               </div>
             </div>
 
-            {/* In-Stock Master Coil */}
             {renderStockInputCard()}
-         {/* Gauge warning */}
+
             {(gaugeOver || gaugeUnder) && (
               <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
                 <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
@@ -966,7 +855,7 @@ return {
                 </p>
               </div>
             )}
-            {/* Standard Master Width Options */}
+
             {!gaugeOver && slitCalc && (
               <div className="rcc-card">
                 <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Standard Master Width Options</p>
@@ -974,15 +863,10 @@ return {
                   {slitCalc.results.map((r) => renderWidthCard(r, slitCalc.best))}
                 </div>
                 {slitCalc.best && renderSlitSummaryBar(slitCalc.best)}
-                {!slitCalc.best && (
-                  <p style={{ fontSize: 12, color: "#a3a3a3", textAlign: "center", padding: "20px 0", fontStyle: "italic" }}>
-                    Enter slit width and gauge to see options.
-                  </p>
-                )}
+                {!slitCalc.best && <p style={{ fontSize: 12, color: "#a3a3a3", textAlign: "center", padding: "20px 0", fontStyle: "italic" }}>Enter slit width and gauge to see options.</p>}
               </div>
             )}
 
-            {/* Stock Coverage Analysis */}
             {!gaugeOver && slitStockAnalysis.some((a) => a.valid) && (
               <div className="rcc-card">
                 <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Stock Coverage Analysis</p>
@@ -1009,12 +893,9 @@ return {
           </>
         )}
 
-        {/* ══════════════════════════════════════════════════ */}
         {/* CTL MODE */}
-        {/* ══════════════════════════════════════════════════ */}
         {mode === "ctl" && (
           <>
-            {/* CTL Requirements */}
             <div className="rcc-card">
               <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>CTL Sheet Requirements</p>
               <div className="rcc-grid4">
@@ -1079,19 +960,16 @@ return {
               )}
             </div>
 
-            {/* In-Stock Master Coil */}
             {renderStockInputCard()}
 
-            {/* Gauge warning */}
             {(gaugeOver || gaugeUnder) && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-              <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
-              {gaugeOver ? "⛔ Gauge exceeds maximum (0.325\") — calculations suppressed until corrected." : "⛔ Gauge below minimum (0.006\") — calculations suppressed until corrected."}
-              </p>
-          </div>
-          )}
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
+                  {gaugeOver ? "⛔ Gauge exceeds maximum (0.325\") — calculations suppressed until corrected." : "⛔ Gauge below minimum (0.006\") — calculations suppressed until corrected."}
+                </p>
+              </div>
+            )}
 
-            {/* Standard Master Width Options */}
             {!gaugeOver && ctlCalc && (
               <div className="rcc-card">
                 <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Standard Master Width Options</p>
@@ -1099,15 +977,10 @@ return {
                   {ctlCalc.results.map((r) => renderCTLWidthCard(r, ctlCalc.best))}
                 </div>
                 {ctlCalc.best && renderCTLSummaryBar(ctlCalc.best)}
-                {!ctlCalc.best && (
-                  <p style={{ fontSize: 12, color: "#a3a3a3", textAlign: "center", padding: "20px 0", fontStyle: "italic" }}>
-                    Enter piece dimensions and gauge to see options.
-                  </p>
-                )}
+                {!ctlCalc.best && <p style={{ fontSize: 12, color: "#a3a3a3", textAlign: "center", padding: "20px 0", fontStyle: "italic" }}>Enter piece dimensions and gauge to see options.</p>}
               </div>
             )}
 
-            {/* CTL Stock Coverage */}
             {!gaugeOver && ctlStockAnalysis.some((a) => a.valid) && (
               <div className="rcc-card">
                 <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Stock Coverage Analysis</p>
@@ -1134,9 +1007,7 @@ return {
           </>
         )}
 
-        {/* ══════════════════════════════════════════════════ */}
         {/* COIL INFO MODE */}
-        {/* ══════════════════════════════════════════════════ */}
         {mode === "info" && (
           <>
             <div className="rcc-card">
@@ -1166,8 +1037,8 @@ return {
                   <div style={{ ...metricBox(true), gridColumn: "span 2" }}>
                     <p style={{ fontSize: 9, fontWeight: 700, color: "#737373", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>Coil OD</p>
                     <p style={{ fontSize: 36, fontWeight: 800, color: "#dc2626", margin: 0, letterSpacing: "-1px" }}>{fmt(coilInfo.od, 2)}"</p>
-<p style={{ fontSize: 11, color: "#a3a3a3", marginTop: 4 }}>{fmt(coilInfo.odMM, 1)} mm &nbsp;·&nbsp; {fmt(coilInfo.coreBuildup, 3)}" buildup/side</p>
-{!coilInfo.odValid && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 6, fontWeight: 600 }}>⚠ Computed OD is less than 0.25" above core ID — check weight and core size inputs.</p>}
+                    <p style={{ fontSize: 11, color: "#a3a3a3", marginTop: 4 }}>{fmt(coilInfo.odMM, 1)} mm &nbsp;·&nbsp; {fmt(coilInfo.coreBuildup, 3)}" buildup/side</p>
+                    {!coilInfo.odValid && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 6, fontWeight: 600 }}>⚠ Computed OD is less than 0.25" above core ID — check weight and core size inputs.</p>}
                   </div>
                 </div>
                 <div className="rcc-grid4">
@@ -1192,7 +1063,7 @@ return {
           </>
         )}
 
-        {/* ── DENSITY REFERENCE ─────────────────────────────── */}
+        {/* DENSITY REFERENCE */}
         <div className="rcc-card" style={{ padding: 12 }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: "#404040", marginBottom: 8 }}>📊 Density Reference (lb/in³)</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -1204,7 +1075,7 @@ return {
           </div>
         </div>
 
-        {/* ── HISTORY ──────────────────────────────────────── */}
+        {/* HISTORY */}
         {history.length > 0 && (
           <div className="rcc-card" style={{ padding: 0, overflow: "hidden" }}>
             <div style={{ background: "linear-gradient(135deg,#171717,#262626)", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1228,7 +1099,7 @@ return {
           </div>
         )}
 
-        {/* ── FOOTER ───────────────────────────────────────── */}
+        {/* FOOTER */}
         <div className="rcc-footer">
           <p style={{ margin: 0 }}>Rolled Coil Calculator — Champagne Metals</p>
           <p style={{ margin: 0, fontStyle: "italic" }}>Erin Morgan — ext. 289</p>
