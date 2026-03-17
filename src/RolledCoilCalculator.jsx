@@ -800,9 +800,9 @@ return {
             </div>
           ))}
         </div>
-        <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
-          Total scrap combines edge drop/trim ({fmt(best.trimPct, 2)}%) and CTL process loss ({best.ctlScrapPct.toFixed(1)}%) — multiplicative.
-        </p>
+       <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
+  Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({parseFloat(headsTails) || 0}%) — combined multiplicatively.
+</p>
       </div>
     );
   }
@@ -961,6 +961,7 @@ return {
 
             {/* Gauge warning */}
             {(gaugeOver || gaugeUnder) && (
+{(gaugeOver || gaugeUnder) && (
   <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16 }}>
     <p style={{ fontSize: 13, color: "#dc2626", fontWeight: 700, margin: 0 }}>
       {gaugeOver ? "⛔ Gauge exceeds maximum (0.325\") — calculations suppressed until corrected." : "⛔ Gauge below minimum (0.006\") — calculations suppressed until corrected."}
