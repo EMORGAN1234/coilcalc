@@ -198,6 +198,12 @@ export default function RolledCoilCalculator() {
       const masterFtNeeded = masterLbsNeeded > 0 ? coilFeet(masterLbsNeeded, mw, g, density) : 0;
       const sheetWt = shLen > 0 ? lbsPerFt(sw, g, density) * (shLen / 12) : 0;
 
+      // Scrap weight calculations (based on masterLbsNeeded if available, else use a reference of 1000 lbs)
+      const refMasterLbs = masterLbsNeeded > 0 ? masterLbsNeeded : 0;
+      const offalLbs = refMasterLbs > 0 ? refMasterLbs * (offalPct / 100) : 0;
+      const htLbs = refMasterLbs > 0 ? refMasterLbs * slitYield * htF : 0;
+      const totalScrapLbs = refMasterLbs > 0 ? refMasterLbs * (scrapPct / 100) : 0;
+
       return {
         mw, valid: true, numSlits, offalIn, offalPct,
         slitYield: slitYield * 100, totalYield: totalYield * 100,
@@ -205,6 +211,7 @@ export default function RolledCoilCalculator() {
         orderFt, orderLbs: orderUnit === "lbs" ? ov : orderLbs,
         orderPcs: orderPcs || (shLen > 0 && orderFt > 0 ? Math.floor(orderFt / (shLen / 12)) : 0),
         sheetWt,
+        offalLbs, htLbs, totalScrapLbs,
       };
     });
 
@@ -272,6 +279,11 @@ export default function RolledCoilCalculator() {
       const leftoverOutputLbs = leftoverMasterLbs * totalYield;
       const leftoverFt = coilFeet(leftoverMasterLbs, scW, gaugeNum, density);
 
+      // Scrap weight breakdown for this specific master coil
+      const offalLbs = scWt * (offalPct / 100);
+      const htLbs = scWt * slitYield * htF;
+      const totalScrapLbs = scWt * (scrapPct / 100);
+
       return {
         ...sc, valid: true, scW, scWt,
         numSlits, offalIn, offalPct, slitYield: slitYield * 100,
@@ -281,6 +293,7 @@ export default function RolledCoilCalculator() {
         fullSlitCoilOD, pupSlitCoilOD, totalSlitCoilsFromMaster,
         masterFt, masterOD,
         canFulfill, orderLbsNeeded, leftoverMasterLbs, leftoverOutputLbs, leftoverFt,
+        offalLbs, htLbs, totalScrapLbs,
       };
     });
   }, [stockCoils, slitWidth, gaugeNum, headsTails, maxCoilWt, maxCoilOD, coreIn, density, slitCalc, gaugeOver]);
@@ -469,7 +482,7 @@ export default function RolledCoilCalculator() {
 
   function saveCalc() {
     if (mode === "slit" && slitCalc?.best) {
-      setHistory((h) => [{ id: Date.now(), mode: "Slit", label: `${slitWidth}" slit from ${slitCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`, detail: `Scrap ${fmt(slitCalc.best.scrapPct, 2)}% · ${slitCalc.best.numSlits} slits · H/T ${headsTails}%` }, ...h].slice(0, 20));
+      setHistory((h) => [{ id: Date.now(), mode: "Slit", label: `${slitWidth}" slit from ${slitCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`, detail: `Scrap ${fmt(slitCalc.best.scrapPct, 2)}% · ${slitCalc.best.numSlits} finish coils · H/T ${headsTails}%` }, ...h].slice(0, 20));
     } else if (mode === "ctl" && ctlCalc?.best) {
       setHistory((h) => [{ id: Date.now(), mode: "CTL", label: `${ctlPieceWidth}"×${ctlPieceLength}" sheet from ${ctlCalc.best.mw}" master — ${alloyId}-${temper} ${gauge}"`, detail: `Scrap ${fmt(ctlCalc.best.scrapPct, 2)}% · ${ctlCalc.best.piecesAcross} across` }, ...h].slice(0, 20));
     } else if (mode === "info" && coilInfo) {
@@ -496,19 +509,25 @@ export default function RolledCoilCalculator() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
-              { l: "Slits", v: String(r.numSlits) },
+              { l: "Finish Coils Yielded", v: String(r.numSlits), note: `(1 per slit strand from ${r.mw}" master)` },
               { l: "Edge Offal", v: `${fmt(r.offalIn, 3)}" (${fmt(r.offalPct, 1)}%)` },
+              ...(r.offalLbs > 0 ? [{ l: "Edge Offal Weight", v: `${fmt(r.offalLbs, 0)} lbs`, dim: true }] : []),
               { l: "Slit Yield", v: `${fmt(r.slitYield, 2)}%` },
               { l: "Heads/Tails Scrap", v: `${headsTails}%`, dim: true },
+              ...(r.htLbs > 0 ? [{ l: "Heads/Tails Weight", v: `${fmt(r.htLbs, 0)} lbs`, dim: true }] : []),
               { l: "Total Scrap (combined)", v: `${fmt(r.scrapPct, 2)}%`, accent: true },
+              ...(r.totalScrapLbs > 0 ? [{ l: "Total Scrap Weight", v: `${fmt(r.totalScrapLbs, 0)} lbs`, accent: true }] : []),
               { l: "lbs / ft (slit)", v: fmt(r.lbsPerFtVal, 4) },
               ...(r.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(r.masterLbsNeeded, 0)} lbs`, bold: true }, { l: "Master ft needed", v: `${fmt(r.masterFtNeeded, 1)} ft` }] : []),
               ...(r.sheetWt > 0 ? [{ l: "Sheet wt (each)", v: `${fmt(r.sheetWt, 3)} lbs` }] : []),
               ...(r.orderPcs > 0 ? [{ l: "Sheets / pcs", v: String(r.orderPcs) }] : []),
             ].map((row, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f0f0", paddingBottom: 4 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: row.dim ? "#a3a3a3" : "#525252", textTransform: "uppercase", letterSpacing: "0.4px" }}>{row.l}</span>
-                <span style={{ fontSize: 12, fontWeight: row.bold ? 800 : 700, color: row.accent ? "#dc2626" : row.dim ? "#a3a3a3" : "#171717" }}>{row.v}</span>
+              <div key={i} style={{ display: "flex", flexDirection: "column", borderBottom: "1px solid #f0f0f0", paddingBottom: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: row.dim ? "#a3a3a3" : row.accent ? "#dc2626" : "#525252", textTransform: "uppercase", letterSpacing: "0.4px" }}>{row.l}</span>
+                  <span style={{ fontSize: 12, fontWeight: row.bold ? 800 : 700, color: row.accent ? "#dc2626" : row.dim ? "#a3a3a3" : "#171717" }}>{row.v}</span>
+                </div>
+                {row.note && <span style={{ fontSize: 9, color: "#a3a3a3", fontStyle: "italic", marginTop: 1 }}>{row.note}</span>}
               </div>
             ))}
           </div>
@@ -579,21 +598,25 @@ export default function RolledCoilCalculator() {
         ) : isSlitMode ? (
           <>
             <div className="rcc-grid4" style={{ gap: 8, marginBottom: 8 }}>
-              <StatBox label="Slits" value={String(analysis.numSlits)} />
+              <StatBox label="Finish Coils Yielded" value={String(analysis.numSlits)} sub={`from ${analysis.scW}" master`} />
               <StatBox label="Total Yield" value={`${fmt(analysis.totalYield, 2)}%`} />
-              <StatBox label="Scrap" value={`${fmt(analysis.scrapPct, 2)}%`} />
+              <StatBox label="Scrap %" value={`${fmt(analysis.scrapPct, 2)}%`} />
               <StatBox label="Master Footage" value={`${fmt(analysis.masterFt, 1)} ft`} />
               <StatBox label="Output / Master" value={`${fmt(analysis.outputPerMaster, 0)} lbs`} green />
-              <StatBox label="Wt / Slit Coil" value={`${fmt(analysis.slitCoilWt, 0)} lbs`} accent />
-              <StatBox label="Ft / Slit Coil" value={`${fmt(analysis.outputFtPerSlit, 1)} ft`} />
+              <StatBox label="Wt / Finish Coil" value={`${fmt(analysis.slitCoilWt, 0)} lbs`} accent />
+              <StatBox label="Ft / Finish Coil" value={`${fmt(analysis.outputFtPerSlit, 1)} ft`} />
               <StatBox label="Full Coil OD" value={`${fmt(analysis.fullSlitCoilOD, 2)}"`} />
+              {/* Scrap weight breakdown */}
+              <StatBox label="Edge Offal Weight" value={`${fmt(analysis.offalLbs, 0)} lbs`} warn />
+              <StatBox label="Heads/Tails Weight" value={`${fmt(analysis.htLbs, 0)} lbs`} warn />
+              <StatBox label="Total Scrap Weight" value={`${fmt(analysis.totalScrapLbs, 0)} lbs`} accent />
               {analysis.coilSizeLimit > 0 && (
                 <>
-                  <StatBox label="Full Coils / Slit" value={String(analysis.fullCoilsPerSlit)} green />
+                  <StatBox label="Full Coils / Strand" value={String(analysis.fullCoilsPerSlit)} green />
                   <StatBox label="Total Coils / Master" value={String(analysis.totalSlitCoilsFromMaster)} accent />
                   {analysis.pupWtPerSlit > 0.01 && (
                     <>
-                      <StatBox label="Pup Wt / Slit" value={`${fmt(analysis.pupWtPerSlit, 0)} lbs`} warn />
+                      <StatBox label="Pup Wt / Strand" value={`${fmt(analysis.pupWtPerSlit, 0)} lbs`} warn />
                       <StatBox label="Pup OD" value={`${fmt(analysis.pupSlitCoilOD, 2)}"`} warn />
                     </>
                   )}
@@ -648,31 +671,70 @@ export default function RolledCoilCalculator() {
     );
   }
 
+  // ── UPDATED: Light summary bar ──────────────────────────────────────────────
   function renderSlitSummaryBar(best) {
     const htNum = parseFloat(headsTails) || 0;
     const rows = [
       { l: "Master Width", v: `${best.mw}"` },
-      { l: "Slits", v: String(best.numSlits) },
+      { l: "Finish Coils Yielded", v: String(best.numSlits), note: "slit strands from master" },
       { l: "Edge Offal", v: `${fmt(best.offalIn, 3)}" (${fmt(best.offalPct, 1)}%)` },
       { l: "Heads/Tails Scrap", v: `${htNum}%`, dim: true },
-      { l: "Total Scrap (combined)", v: `${fmt(best.scrapPct, 2)}%`, accent: true },
+      { l: "Total Scrap", v: `${fmt(best.scrapPct, 2)}%`, accent: true },
       { l: "lbs / ft (slit)", v: fmt(best.lbsPerFtVal, 4) },
       ...(best.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(best.masterLbsNeeded, 0)} lbs` }] : []),
     ];
+
+    // Scrap weight rows (only if we have order-based master weight)
+    const scrapRows = best.masterLbsNeeded > 0 ? [
+      { l: "Edge Offal Weight", v: `${fmt(best.offalLbs, 0)} lbs`, warn: true },
+      { l: "Heads/Tails Weight", v: `${fmt(best.htLbs, 0)} lbs`, warn: true },
+      { l: "Total Scrap Weight", v: `${fmt(best.totalScrapLbs, 0)} lbs`, accent: true },
+    ] : [];
+
     return (
-      <div style={{ background: "linear-gradient(135deg,#171717,#262626)", borderRadius: 14, padding: 16, marginTop: 16 }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: "#a3a3a3", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 12 }}>★ Best Option Summary — {best.mw}" Master</p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+      <div style={{
+        background: "linear-gradient(135deg,#fafafa,#f5f5f5)",
+        border: "2px solid #dc2626",
+        borderRadius: 14,
+        padding: 20,
+        marginTop: 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
+          <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
+            ★ Best Option Summary — {best.mw}" Master
+          </p>
+        </div>
+
+        {/* Main metrics */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: scrapRows.length > 0 ? 16 : 0 }}>
           {rows.map((r, i) => (
             <div key={i}>
               <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>{r.l}</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: r.accent ? "#fca5a5" : r.dim ? "#737373" : "#fff", margin: 0 }}>{r.v}</p>
+              {r.note && <p style={{ fontSize: 8, color: "#a3a3a3", fontStyle: "italic", margin: "0 0 2px" }}>{r.note}</p>}
+              <p style={{ fontSize: 15, fontWeight: 700, color: r.accent ? "#dc2626" : r.dim ? "#a3a3a3" : "#171717", margin: 0 }}>{r.v}</p>
             </div>
           ))}
         </div>
+
+        {/* Scrap weight breakdown */}
+        {scrapRows.length > 0 && (
+          <div style={{ borderTop: "1px solid #e5e5e5", paddingTop: 14 }}>
+            <p style={{ fontSize: 9, fontWeight: 700, color: "#737373", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Scrap Weight Breakdown (based on {fmt(best.masterLbsNeeded, 0)} lbs master)</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              {scrapRows.map((r, i) => (
+                <div key={i} style={{ borderRadius: 8, padding: "8px 14px", border: `1px solid ${r.accent ? "#fecaca" : "#fde68a"}`, background: r.accent ? "linear-gradient(135deg,#fef2f2,#fee2e2)" : "linear-gradient(135deg,#fffbeb,#fef3c7)", minWidth: 120 }}>
+                  <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 3px" }}>{r.l}</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: r.accent ? "#dc2626" : "#b45309", margin: 0 }}>{r.v}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {htNum === 0 && <p style={{ fontSize: 10, color: "#f59e0b", marginTop: 10 }}>⚠ Heads/tails scrap is 0% — update if applicable</p>}
-        <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
-          Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({parseFloat(headsTails) || 0}%) — combined multiplicatively.
+        <p style={{ fontSize: 10, color: "#737373", marginTop: 12, fontStyle: "italic" }}>
+          Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({htNum}%) — combined multiplicatively.
         </p>
       </div>
     );
@@ -691,19 +753,28 @@ export default function RolledCoilCalculator() {
       ...(best.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(best.masterLbsNeeded, 0)} lbs` }] : []),
     ];
     return (
-      <div style={{ background: "linear-gradient(135deg,#171717,#262626)", borderRadius: 14, padding: 16, marginTop: 16 }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: "#a3a3a3", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 12 }}>
-          ★ Best Option Summary — {best.mw}" Master{best.rotated ? " (↔ Rotated)" : ""}
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+      <div style={{
+        background: "linear-gradient(135deg,#fafafa,#f5f5f5)",
+        border: "2px solid #dc2626",
+        borderRadius: 14,
+        padding: 20,
+        marginTop: 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
+          <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
+            ★ Best Option Summary — {best.mw}" Master{best.rotated ? " (↔ Rotated)" : ""}
+          </p>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
           {rows.map((r, i) => (
             <div key={i}>
               <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>{r.l}</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: r.accent ? "#fca5a5" : r.dim ? "#737373" : "#fff", margin: 0 }}>{r.v}</p>
+              <p style={{ fontSize: 15, fontWeight: 700, color: r.accent ? "#dc2626" : r.dim ? "#a3a3a3" : "#171717", margin: 0 }}>{r.v}</p>
             </div>
           ))}
         </div>
-        <p style={{ fontSize: 10, color: "#525252", marginTop: 10, fontStyle: "italic" }}>
+        <p style={{ fontSize: 10, color: "#737373", marginTop: 12, fontStyle: "italic" }}>
           Scrap rate includes both edge offal ({fmt(best.trimPct, 2)}%) and CTL process scrap ({best.ctlScrapPct.toFixed(1)}%) — combined multiplicatively.
         </p>
       </div>
@@ -750,14 +821,6 @@ export default function RolledCoilCalculator() {
         {/* HEADER */}
         <div className="rcc-card-accent">
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: "linear-gradient(135deg,#dc2626,#991b1b)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 12px rgba(220,38,38,0.4)", flexShrink: 0 }}>
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <circle cx="14" cy="14" r="12" stroke="white" strokeWidth="2.2" fill="none" />
-                <circle cx="14" cy="14" r="8" stroke="white" strokeWidth="1.8" fill="none" />
-                <circle cx="14" cy="14" r="4.5" stroke="white" strokeWidth="1.4" fill="none" />
-                <circle cx="14" cy="14" r="1.5" fill="white" />
-              </svg>
-            </div>
             <div>
               <h1 style={{ fontSize: 26, fontWeight: 800, color: "#171717", margin: 0, letterSpacing: "-0.5px" }}>Rolled Coil Calculator</h1>
               <p style={{ fontSize: 13, color: "#737373", margin: "2px 0 0", fontWeight: 500 }}>Slit Coil Planner · CTL Sheet Planner · Coil Info</p>
@@ -821,14 +884,10 @@ export default function RolledCoilCalculator() {
                 <div>
                   <label style={S.lbl}>Order Unit</label>
                   <div style={{ display: "flex", gap: 4 }}>
-                    {["lbs", "ft", "pcs"].map((u) => (
+                    {["lbs", "ft"].map((u) => (
                       <button key={u} onClick={() => setOrderUnit(u)} style={{ ...btnStyle(orderUnit === u), padding: "8px 10px", flex: 1 }}>{u}</button>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <label style={S.lbl}>Sheet Length (") <span style={{ fontWeight: 400, textTransform: "none" }}>optional</span></label>
-                  <input type="number" step="0.5" value={sheetLength} onChange={(e) => setSheetLength(e.target.value)} style={S.inp} placeholder="e.g. 120" />
                 </div>
                 <div>
                   <label style={S.lbl}>Max Output Coil Wt (lbs) <span style={{ fontWeight: 400, textTransform: "none" }}>optional</span></label>
@@ -838,11 +897,6 @@ export default function RolledCoilCalculator() {
                   <label style={S.lbl}>Max Output Coil OD (") <span style={{ fontWeight: 400, textTransform: "none" }}>optional</span></label>
                   <input type="number" step="0.5" value={maxCoilOD} onChange={(e) => setMaxCoilOD(e.target.value)} style={S.inp} placeholder="e.g. 60" />
                 </div>
-                {orderUnit === "pcs" && !sheetLength && (
-                  <div style={{ gridColumn: "span 1", display: "flex", alignItems: "center" }}>
-                    <p style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>⚠ Enter sheet length to calculate pcs</p>
-                  </div>
-                )}
               </div>
             </div>
 
