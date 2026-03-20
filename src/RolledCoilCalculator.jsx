@@ -144,6 +144,8 @@ export default function RolledCoilCalculator() {
 
   const [stockCoils, setStockCoils] = useState([{ width: "", weight: "", tag: "" }]);
   const [history, setHistory] = useState([]);
+  const [selectedSlitMw, setSelectedSlitMw] = useState(null);
+  const [selectedCtlMw, setSelectedCtlMw] = useState(null);
 
   useEffect(() => {
     if (DEFAULT_TEMPERS[alloyId]) setTemper(DEFAULT_TEMPERS[alloyId]);
@@ -155,6 +157,12 @@ export default function RolledCoilCalculator() {
   const gaugeOver = gaugeNum > 0.325;
   const gaugeUnder = gaugeNum > 0 && gaugeNum < 0.006;
   const coreIn = parseFloat(coreID) || 20;
+
+  // Reset manual selection when inputs change so summary defaults back to best
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelectedSlitMw(null); }, [slitWidth, gaugeNum, headsTails, orderVal, orderUnit]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelectedCtlMw(null); }, [ctlPieceWidth, ctlPieceLength, ctlScrap, ctlGrainReq, ctlQtyPcs, gaugeNum]);
 
   const slitCalc = useMemo(() => {
     const sw = parseFloat(slitWidth) || 0;
@@ -298,7 +306,7 @@ export default function RolledCoilCalculator() {
     });
   }, [stockCoils, slitWidth, gaugeNum, headsTails, maxCoilWt, maxCoilOD, coreIn, density, slitCalc, gaugeOver]);
 
-  function calcCTLOption(masterWidth, pieceW, pieceL, ctlScrapPct) {
+  const calcCTLOption = (masterWidth, pieceW, pieceL, ctlScrapPct) => {
     const g = gaugeNum;
     if (!masterWidth || masterWidth < 30 || pieceW <= 0 || pieceL <= 0 || g < 0.006 || g > 0.325) return null;
 
@@ -367,7 +375,7 @@ export default function RolledCoilCalculator() {
       cutsNeeded, masterFtNeeded, masterLbsNeeded,
       usePW: result.pw, usePL: result.pl,
     };
-  }
+  };
 
   const ctlCalc = useMemo(() => {
     const pw = parseFloat(ctlPieceWidth) || 0;
@@ -496,14 +504,32 @@ export default function RolledCoilCalculator() {
     <button onClick={() => setMode(id)} style={{ ...btnStyle(mode === id), padding: "8px 18px", fontSize: 12 }}>{label}</button>
   );
 
-  function renderWidthCard(r, best) {
+  function renderWidthCard(r, best, selectedMw, onSelect) {
     const isBest = best && r.mw === best.mw;
-    const border = !r.valid ? "1px solid #e5e5e5" : isBest ? "2px solid #dc2626" : "1px solid #e5e5e5";
-    const bg = !r.valid ? "#fafafa" : isBest ? "linear-gradient(135deg,#fef2f2,#fff)" : "linear-gradient(135deg,#fafafa,#fff)";
+    const isSelected = r.mw === selectedMw;
+    const border = !r.valid
+      ? "1px solid #e5e5e5"
+      : isSelected
+        ? "2px solid #dc2626"
+        : isBest
+          ? "2px dashed #dc2626"
+          : "1px solid #e5e5e5";
+    const bg = !r.valid
+      ? "#fafafa"
+      : isSelected
+        ? "linear-gradient(135deg,#fef2f2,#fff)"
+        : isBest
+          ? "linear-gradient(135deg,#fff8f8,#fff)"
+          : "linear-gradient(135deg,#fafafa,#fff)";
     return (
-      <div key={r.mw} style={{ borderRadius: 14, border, background: bg, padding: 16, position: "relative" }}>
-        {isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>★ BEST</div>}
-        <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
+      <div
+        key={r.mw}
+        onClick={() => r.valid && onSelect(r.mw)}
+        style={{ borderRadius: 14, border, background: bg, padding: 16, position: "relative", cursor: r.valid ? "pointer" : "default", transition: "box-shadow 0.15s", boxShadow: isSelected ? "0 4px 16px rgba(220,38,38,0.15)" : "none" }}
+      >
+        {isSelected && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>● SELECTED</div>}
+        {!isSelected && isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "#fff", color: "#dc2626", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px", border: "1px solid #fecaca" }}>★ BEST</div>}
+        <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isSelected || isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
         {!r.valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{r.reason}</p>
         ) : (
@@ -536,15 +562,33 @@ export default function RolledCoilCalculator() {
     );
   }
 
-  function renderCTLWidthCard(r, best) {
+  function renderCTLWidthCard(r, best, selectedMw, onSelect) {
     const isBest = best && r.mw === best.mw;
-    const border = !r.valid ? "1px solid #e5e5e5" : isBest ? "2px solid #dc2626" : "1px solid #e5e5e5";
-    const bg = !r.valid ? "#fafafa" : isBest ? "linear-gradient(135deg,#fef2f2,#fff)" : "linear-gradient(135deg,#fafafa,#fff)";
+    const isSelected = r.mw === selectedMw;
+    const border = !r.valid
+      ? "1px solid #e5e5e5"
+      : isSelected
+        ? "2px solid #dc2626"
+        : isBest
+          ? "2px dashed #dc2626"
+          : "1px solid #e5e5e5";
+    const bg = !r.valid
+      ? "#fafafa"
+      : isSelected
+        ? "linear-gradient(135deg,#fef2f2,#fff)"
+        : isBest
+          ? "linear-gradient(135deg,#fff8f8,#fff)"
+          : "linear-gradient(135deg,#fafafa,#fff)";
     return (
-      <div key={r.mw} style={{ borderRadius: 14, border, background: bg, padding: 16, position: "relative" }}>
-        {isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>★ BEST</div>}
-        {r.rotated && <div style={{ position: "absolute", top: isBest ? 32 : 10, right: 10, background: "#171717", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>↔ ROTATED</div>}
-        <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
+      <div
+        key={r.mw}
+        onClick={() => r.valid && onSelect(r.mw)}
+        style={{ borderRadius: 14, border, background: bg, padding: 16, position: "relative", cursor: r.valid ? "pointer" : "default", transition: "box-shadow 0.15s", boxShadow: isSelected ? "0 4px 16px rgba(220,38,38,0.15)" : "none" }}
+      >
+        {isSelected && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>● SELECTED</div>}
+        {!isSelected && isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "#fff", color: "#dc2626", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px", border: "1px solid #fecaca" }}>★ BEST</div>}
+        {r.rotated && <div style={{ position: "absolute", top: (isSelected || isBest) ? 32 : 10, right: 10, background: "#171717", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>↔ ROTATED</div>}
+        <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isSelected || isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
         {!r.valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{r.reason}</p>
         ) : (
@@ -671,24 +715,24 @@ export default function RolledCoilCalculator() {
     );
   }
 
-  // ── UPDATED: Light summary bar ──────────────────────────────────────────────
-  function renderSlitSummaryBar(best) {
+  function renderSlitSummaryBar(selected, best) {
+    const isBestSelected = best && selected.mw === best.mw;
     const htNum = parseFloat(headsTails) || 0;
     const rows = [
-      { l: "Master Width", v: `${best.mw}"` },
-      { l: "Finish Coils Yielded", v: String(best.numSlits), note: "slit strands from master" },
-      { l: "Edge Offal", v: `${fmt(best.offalIn, 3)}" (${fmt(best.offalPct, 1)}%)` },
+      { l: "Master Width", v: `${selected.mw}"` },
+      { l: "Finish Coils Yielded", v: String(selected.numSlits), note: "slit strands from master" },
+      { l: "Edge Offal", v: `${fmt(selected.offalIn, 3)}" (${fmt(selected.offalPct, 1)}%)` },
       { l: "Heads/Tails Scrap", v: `${htNum}%`, dim: true },
-      { l: "Total Scrap", v: `${fmt(best.scrapPct, 2)}%`, accent: true },
-      { l: "lbs / ft (slit)", v: fmt(best.lbsPerFtVal, 4) },
-      ...(best.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(best.masterLbsNeeded, 0)} lbs` }] : []),
+      { l: "Total Scrap", v: `${fmt(selected.scrapPct, 2)}%`, accent: true },
+      { l: "lbs / ft (slit)", v: fmt(selected.lbsPerFtVal, 4) },
+      ...(selected.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(selected.masterLbsNeeded, 0)} lbs` }] : []),
     ];
 
     // Scrap weight rows (only if we have order-based master weight)
-    const scrapRows = best.masterLbsNeeded > 0 ? [
-      { l: "Edge Offal Weight", v: `${fmt(best.offalLbs, 0)} lbs`, warn: true },
-      { l: "Heads/Tails Weight", v: `${fmt(best.htLbs, 0)} lbs`, warn: true },
-      { l: "Total Scrap Weight", v: `${fmt(best.totalScrapLbs, 0)} lbs`, accent: true },
+    const scrapRows = selected.masterLbsNeeded > 0 ? [
+      { l: "Edge Offal Weight", v: `${fmt(selected.offalLbs, 0)} lbs`, warn: true },
+      { l: "Heads/Tails Weight", v: `${fmt(selected.htLbs, 0)} lbs`, warn: true },
+      { l: "Total Scrap Weight", v: `${fmt(selected.totalScrapLbs, 0)} lbs`, accent: true },
     ] : [];
 
     return (
@@ -702,7 +746,8 @@ export default function RolledCoilCalculator() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
           <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
-            ★ Best Option Summary — {best.mw}" Master
+            {isBestSelected ? "★ Best Option" : "● Selected"} Summary — {selected.mw}" Master
+            {!isBestSelected && best && <span style={{ fontWeight: 400, color: "#a3a3a3", fontSize: 10, marginLeft: 8 }}>(best is {best.mw}")</span>}
           </p>
         </div>
 
@@ -720,7 +765,7 @@ export default function RolledCoilCalculator() {
         {/* Scrap weight breakdown */}
         {scrapRows.length > 0 && (
           <div style={{ borderTop: "1px solid #e5e5e5", paddingTop: 14 }}>
-            <p style={{ fontSize: 9, fontWeight: 700, color: "#737373", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Scrap Weight Breakdown (based on {fmt(best.masterLbsNeeded, 0)} lbs master)</p>
+            <p style={{ fontSize: 9, fontWeight: 700, color: "#737373", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Scrap Weight Breakdown (based on {fmt(selected.masterLbsNeeded, 0)} lbs master)</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
               {scrapRows.map((r, i) => (
                 <div key={i} style={{ borderRadius: 8, padding: "8px 14px", border: `1px solid ${r.accent ? "#fecaca" : "#fde68a"}`, background: r.accent ? "linear-gradient(135deg,#fef2f2,#fee2e2)" : "linear-gradient(135deg,#fffbeb,#fef3c7)", minWidth: 120 }}>
@@ -734,23 +779,24 @@ export default function RolledCoilCalculator() {
 
         {htNum === 0 && <p style={{ fontSize: 10, color: "#f59e0b", marginTop: 10 }}>⚠ Heads/tails scrap is 0% — update if applicable</p>}
         <p style={{ fontSize: 10, color: "#737373", marginTop: 12, fontStyle: "italic" }}>
-          Scrap rate includes both edge offal ({fmt(best.offalPct, 2)}%) and heads/tails ({htNum}%) — combined multiplicatively.
+          Scrap rate includes both edge offal ({fmt(selected.offalPct, 2)}%) and heads/tails ({htNum}%) — combined multiplicatively.
         </p>
       </div>
     );
   }
 
-  function renderCTLSummaryBar(best) {
+  function renderCTLSummaryBar(selected, best) {
+    const isBestSelected = best && selected.mw === best.mw;
     const rows = [
-      { l: "Master Width", v: `${best.mw}"` },
-      { l: "Pcs Across", v: String(best.piecesAcross) },
-      { l: "Grain Direction", v: best.rotated ? "Along piece WIDTH" : "Along piece LENGTH" },
-      { l: "Edge Drop", v: `${fmt(best.trimIn, 3)}"` },
-      { l: "Trim Scrap", v: `${fmt(best.trimPct, 2)}%`, dim: true },
-      { l: "CTL Process Scrap", v: `${best.ctlScrapPct.toFixed(1)}%`, dim: true },
-      { l: "Total Scrap (trim + CTL)", v: `${fmt(best.scrapPct, 2)}%`, accent: true },
-      ...(best.cutsNeeded > 0 ? [{ l: "Cuts Needed", v: String(best.cutsNeeded) }] : []),
-      ...(best.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(best.masterLbsNeeded, 0)} lbs` }] : []),
+      { l: "Master Width", v: `${selected.mw}"` },
+      { l: "Pcs Across", v: String(selected.piecesAcross) },
+      { l: "Grain Direction", v: selected.rotated ? "Along piece WIDTH" : "Along piece LENGTH" },
+      { l: "Edge Drop", v: `${fmt(selected.trimIn, 3)}"` },
+      { l: "Trim Scrap", v: `${fmt(selected.trimPct, 2)}%`, dim: true },
+      { l: "CTL Process Scrap", v: `${selected.ctlScrapPct.toFixed(1)}%`, dim: true },
+      { l: "Total Scrap (trim + CTL)", v: `${fmt(selected.scrapPct, 2)}%`, accent: true },
+      ...(selected.cutsNeeded > 0 ? [{ l: "Cuts Needed", v: String(selected.cutsNeeded) }] : []),
+      ...(selected.masterLbsNeeded > 0 ? [{ l: "Master lbs needed", v: `${fmt(selected.masterLbsNeeded, 0)} lbs` }] : []),
     ];
     return (
       <div style={{
@@ -763,7 +809,8 @@ export default function RolledCoilCalculator() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
           <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
-            ★ Best Option Summary — {best.mw}" Master{best.rotated ? " (↔ Rotated)" : ""}
+            {isBestSelected ? "★ Best Option" : "● Selected"} Summary — {selected.mw}" Master{selected.rotated ? " (↔ Rotated)" : ""}
+            {!isBestSelected && best && <span style={{ fontWeight: 400, color: "#a3a3a3", fontSize: 10, marginLeft: 8 }}>(best is {best.mw}")</span>}
           </p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
@@ -775,7 +822,7 @@ export default function RolledCoilCalculator() {
           ))}
         </div>
         <p style={{ fontSize: 10, color: "#737373", marginTop: 12, fontStyle: "italic" }}>
-          Scrap rate includes both edge offal ({fmt(best.trimPct, 2)}%) and CTL process scrap ({best.ctlScrapPct.toFixed(1)}%) — combined multiplicatively.
+          Scrap rate includes both edge offal ({fmt(selected.trimPct, 2)}%) and CTL process scrap ({selected.ctlScrapPct.toFixed(1)}%) — combined multiplicatively.
         </p>
       </div>
     );
@@ -914,9 +961,9 @@ export default function RolledCoilCalculator() {
               <div className="rcc-card">
                 <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Standard Master Width Options</p>
                 <div className="rcc-width-grid">
-                  {slitCalc.results.map((r) => renderWidthCard(r, slitCalc.best))}
+                  {slitCalc.results.map((r) => renderWidthCard(r, slitCalc.best, selectedSlitMw ?? slitCalc.best?.mw, setSelectedSlitMw))}
                 </div>
-                {slitCalc.best && renderSlitSummaryBar(slitCalc.best)}
+
                 {!slitCalc.best && <p style={{ fontSize: 12, color: "#a3a3a3", textAlign: "center", padding: "20px 0", fontStyle: "italic" }}>Enter slit width and gauge to see options.</p>}
               </div>
             )}
@@ -1028,9 +1075,9 @@ export default function RolledCoilCalculator() {
               <div className="rcc-card">
                 <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Standard Master Width Options</p>
                 <div className="rcc-width-grid">
-                  {ctlCalc.results.map((r) => renderCTLWidthCard(r, ctlCalc.best))}
+                  {ctlCalc.results.map((r) => renderCTLWidthCard(r, ctlCalc.best, selectedCtlMw ?? ctlCalc.best?.mw, setSelectedCtlMw))}
                 </div>
-                {ctlCalc.best && renderCTLSummaryBar(ctlCalc.best)}
+
                 {!ctlCalc.best && <p style={{ fontSize: 12, color: "#a3a3a3", textAlign: "center", padding: "20px 0", fontStyle: "italic" }}>Enter piece dimensions and gauge to see options.</p>}
               </div>
             )}
