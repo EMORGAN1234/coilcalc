@@ -535,7 +535,7 @@ export default function RolledCoilCalculator() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
-              { l: "Finish Coils Yielded", v: String(r.numSlits), note: `(1 per slit strand from ${r.mw}" master)` },
+              { l: "Finish Coils Yielded", v: String(r.numSlits) },
               { l: "Edge Offal", v: `${fmt(r.offalIn, 3)}" (${fmt(r.offalPct, 1)}%)` },
               ...(r.offalLbs > 0 ? [{ l: "Edge Offal Weight", v: `${fmt(r.offalLbs, 0)} lbs`, dim: true }] : []),
               { l: "Slit Yield", v: `${fmt(r.slitYield, 2)}%` },
