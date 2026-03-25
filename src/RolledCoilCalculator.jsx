@@ -755,18 +755,50 @@ export default function RolledCoilCalculator() {
               </div>
             )}
           </>
-        ) : (
+      ) : (
           <>
+            {/* ── Headline yield banner — always visible, no order needed ── */}
+            <div style={{ background: "linear-gradient(135deg,#171717,#262626)", borderRadius: 10, padding: "12px 16px", marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 20, alignItems: "center" }}>
+              <div>
+                <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Sheets Available</p>
+                <p style={{ fontSize: 28, fontWeight: 800, color: "#4ade80", margin: 0, letterSpacing: "-1px" }}>{analysis.pcsAvail.toLocaleString()}</p>
+                <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>pcs · {analysis.piecesAcross} across · {analysis.cutsAvail} cuts</p>
+              </div>
+              <div style={{ borderLeft: "1px solid #404040", paddingLeft: 20 }}>
+                <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Total Yield</p>
+                <p style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>{fmt(analysis.totalYield, 2)}%</p>
+                <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>scrap: {fmt(analysis.scrapPct, 2)}%</p>
+              </div>
+              {ctlPcWt > 0 && (
+                <div style={{ borderLeft: "1px solid #404040", paddingLeft: 20 }}>
+                  <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Output Weight</p>
+                  <p style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>{fmt(analysis.pcsAvail * ctlPcWt, 0)} lbs</p>
+                  <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>{fmt(ctlPcWt, 4)} lbs/pc</p>
+                </div>
+              )}
+              {parseFloat(ctlPieceWidth) > 0 && parseFloat(ctlPieceLength) > 0 && (
+                <div style={{ borderLeft: "1px solid #404040", paddingLeft: 20 }}>
+                  <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Output Area</p>
+                  <p style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>{fmt(analysis.pcsAvail * (parseFloat(ctlPieceWidth) * parseFloat(ctlPieceLength) / 144), 1)} ft²</p>
+                  <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>{fmt(parseFloat(ctlPieceWidth) * parseFloat(ctlPieceLength) / 144, 4)} ft²/pc</p>
+                </div>
+              )}
+              {analysis.rotated && (
+                <div style={{ borderLeft: "1px solid #404040", paddingLeft: 20 }}>
+                  <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Orientation</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24", margin: 0 }}>↔ Rotated</p>
+                  <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>grain along piece WIDTH</p>
+                </div>
+              )}
+            </div>
             <div className="rcc-grid4" style={{ gap: 8, marginBottom: 8 }}>
               <StatBox label="Pcs Across" value={String(analysis.piecesAcross)} />
               <StatBox label="Edge Drop" value={`${fmt(analysis.trimIn, 3)}"`} />
-              <StatBox label="Total Scrap" value={`${fmt(analysis.scrapPct, 2)}%`} />
-              <StatBox label="Total Yield" value={`${fmt(analysis.totalYield, 2)}%`} />
-              <StatBox label="Cuts Avail" value={String(analysis.cutsAvail)} green />
-              <StatBox label="Pcs Avail" value={String(analysis.pcsAvail)} accent />
+              <StatBox label="Total Scrap" value={`${fmt(analysis.scrapPct, 2)}%`} accent />
+              <StatBox label="Total Yield" value={`${fmt(analysis.totalYield, 2)}%`} green />
+              <StatBox label="Cuts Available" value={String(analysis.cutsAvail)} green />
               <StatBox label="Master Footage" value={`${fmt(analysis.masterFt, 1)} ft`} />
               <StatBox label="Master OD" value={`${fmt(analysis.masterOD, 2)}"`} />
-              {analysis.rotated && <StatBox label="Orientation" value="↔ Rotated" />}
             </div>
             {hasOrder && (
               <div style={{ borderTop: "1px solid #e5e5e5", paddingTop: 10, marginTop: 4 }}>
