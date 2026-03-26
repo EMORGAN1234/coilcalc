@@ -19,7 +19,7 @@ const DEFAULT_TEMPERS = {
   "5005": "H32", "5052": "H32", "5182": "H32", "6061": "T6", "7075": "T6",
 };
 
-const STANDARD_WIDTHS = [36, 48, 60, 72];
+const BASE_STANDARD_WIDTHS = [36, 48, 60, 72];
 
 const font = "'Inter','Segoe UI',system-ui,sans-serif";
 
@@ -99,23 +99,18 @@ function StatBox({ label, value, sub, green, accent, warn }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CORE MATH HELPERS
-// All internal values use DECIMALS for yield/scrap/percentages.
-// Only display-layer formatting multiplies by 100 for UI output.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Linear feet of material on a coil */
 function coilFeet(weightLbs, widthIn, gaugeIn, densityLbIn3) {
   if (weightLbs <= 0 || widthIn <= 0 || gaugeIn <= 0 || densityLbIn3 <= 0) return 0;
   return weightLbs / (widthIn * gaugeIn * densityLbIn3 * 12);
 }
 
-/** Coil OD in inches given weight, width, density, core ID */
 function coilOD(weightLbs, widthIn, densityLbIn3, coreIDin) {
   if (weightLbs <= 0 || widthIn <= 0 || densityLbIn3 <= 0 || coreIDin <= 0) return 0;
   return Math.sqrt(coreIDin * coreIDin + (4 * weightLbs) / (PI * densityLbIn3 * widthIn));
 }
 
-/** lbs per linear foot */
 function lbsPerFt(widthIn, gaugeIn, densityLbIn3) {
   return widthIn * gaugeIn * densityLbIn3 * 12;
 }
@@ -124,19 +119,33 @@ function coilODValid(od, coreIDin) {
   return od > coreIDin + 0.25;
 }
 
-/**
- * Calculate slit yield for a given master width + slit width + heads/tails.
- * Returns all values as DECIMALS (not percentages).
- */
 function calcSlitYields(masterWidth, slitWidth, htDecimal) {
   const numSlits = Math.floor(masterWidth / slitWidth);
   if (numSlits <= 0) return null;
   const offalIn = masterWidth - numSlits * slitWidth;
-  const offalPctDecimal = offalIn / masterWidth;            // e.g. 0.2292
-  const slitYieldDecimal = (numSlits * slitWidth) / masterWidth; // e.g. 0.7708
-  const totalYieldDecimal = slitYieldDecimal * (1 - htDecimal);  // e.g. 0.7554
-  const scrapDecimal = 1 - totalYieldDecimal;               // e.g. 0.2446
+  const offalPctDecimal = offalIn / masterWidth;
+  const slitYieldDecimal = (numSlits * slitWidth) / masterWidth;
+  const totalYieldDecimal = slitYieldDecimal * (1 - htDecimal);
+  const scrapDecimal = 1 - totalYieldDecimal;
   return { numSlits, offalIn, offalPctDecimal, slitYieldDecimal, totalYieldDecimal, scrapDecimal };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Build dynamic master width list: base standards + any unique stock coil widths
+// that aren't already covered, sorted ascending
+// ─────────────────────────────────────────────────────────────────────────────
+function buildMasterWidths(stockCoils) {
+  const stockWidths = stockCoils
+    .map((sc) => parseFloat(sc.width))
+    .filter((w) => w > 0 && !isNaN(w));
+  const all = [...BASE_STANDARD_WIDTHS];
+  for (const sw of stockWidths) {
+    // Only add if not already within 0.1" of an existing entry
+    if (!all.some((w) => Math.abs(w - sw) < 0.1)) {
+      all.push(sw);
+    }
+  }
+  return all.sort((a, b) => a - b);
 }
 
 export default function RolledCoilCalculator() {
@@ -182,13 +191,34 @@ export default function RolledCoilCalculator() {
   const gaugeUnder = gaugeNum > 0 && gaugeNum < 0.006;
   const coreIn = parseFloat(coreID) || 20;
 
+  // Dynamic master widths — recalculated whenever stock coils change
+  const masterWidths = useMemo(() => buildMasterWidths(stockCoils), [stockCoils]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSelectedSlitMw(null); }, [slitWidth, gaugeNum, headsTails, orderVal, orderUnit]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSelectedCtlMw(null); }, [ctlPieceWidth, ctlPieceLength, ctlScrap, ctlGrainReq, ctlQtyPcs, gaugeNum]);
 
   // ─────────────────────────────────────────────────────────────
-  // SLIT CALC — Standard master width options
+  // RESET HELPERS
+  // ─────────────────────────────────────────────────────────────
+  function resetSlit() {
+    setSlitWidth(""); setHeadsTails("2"); setOrderVal("");
+    setOrderUnit("lbs"); setSheetLength(""); setMaxCoilWt("");
+    setMaxCoilOD(""); setStockCoils([{ width: "", weight: "", tag: "" }]);
+    setSelectedSlitMw(null);
+  }
+
+  function resetCtl() {
+    setCtlPieceWidth(""); setCtlPieceLength(""); setCtlScrap("2");
+    setCtlGrainReq("none"); setCtlAnyOrientation(true);
+    setCtlQtyPcs(""); setCtlQtyLbs(""); setCtlQtyFt2("");
+    setStockCoils([{ width: "", weight: "", tag: "" }]);
+    setSelectedCtlMw(null);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // SLIT CALC — Dynamic master width options
   // ─────────────────────────────────────────────────────────────
   const slitCalc = useMemo(() => {
     const sw = parseFloat(slitWidth) || 0;
@@ -198,7 +228,7 @@ export default function RolledCoilCalculator() {
 
     if (!sw || sw <= 0 || !g || g < 0.006 || g > 0.325) return null;
 
-    const results = STANDARD_WIDTHS.map((mw) => {
+    const results = masterWidths.map((mw) => {
       const yields = calcSlitYields(mw, sw, htDecimal);
       if (!yields) return { mw, valid: false, reason: `${sw}" slit doesn't fit in ${mw}" master` };
 
@@ -224,31 +254,31 @@ export default function RolledCoilCalculator() {
         }
       }
 
-      // Gross master lbs needed to NET the order quantity for THIS master width
       const masterLbsNeeded = orderLbs > 0 ? orderLbs / totalYieldDecimal : 0;
       const masterFtNeeded = masterLbsNeeded > 0 ? coilFeet(masterLbsNeeded, mw, g, density) : 0;
       const sheetWt = shLen > 0 ? lbsPerFt(sw, g, density) * (shLen / 12) : 0;
 
-      // Scrap weight breakdown (only meaningful when we have an order-driven master weight)
       const refMasterLbs = masterLbsNeeded > 0 ? masterLbsNeeded : 0;
       const offalLbs = refMasterLbs > 0 ? refMasterLbs * offalPctDecimal : 0;
-      // htLbs = heads/tails scrap on the slit-output portion only
       const htLbs = refMasterLbs > 0 ? refMasterLbs * slitYieldDecimal * htDecimal : 0;
       const totalScrapLbs = refMasterLbs > 0 ? refMasterLbs * scrapDecimal : 0;
 
+      // Flag if this width came from a stock coil (not a base standard)
+      const isStockWidth = !BASE_STANDARD_WIDTHS.includes(mw);
+
       return {
         mw, valid: true, numSlits, offalIn,
-        offalPct: offalPctDecimal * 100,      // display only
-        slitYield: slitYieldDecimal * 100,    // display only
-        totalYield: totalYieldDecimal * 100,  // display only
-        scrapPct: scrapDecimal * 100,         // display only
-        // Keep decimals available for downstream calculations
+        offalPct: offalPctDecimal * 100,
+        slitYield: slitYieldDecimal * 100,
+        totalYield: totalYieldDecimal * 100,
+        scrapPct: scrapDecimal * 100,
         totalYieldDecimal,
         lbsPerFtVal, masterLbsNeeded, masterFtNeeded,
         orderFt, orderLbs: orderUnit === "lbs" ? ov : orderLbs,
         orderPcs: orderPcs || (shLen > 0 && orderFt > 0 ? Math.floor(orderFt / (shLen / 12)) : 0),
         sheetWt,
         offalLbs, htLbs, totalScrapLbs,
+        isStockWidth,
       };
     });
 
@@ -256,10 +286,10 @@ export default function RolledCoilCalculator() {
     if (!valid.length) return { results, best: null };
     const best = valid.reduce((b, c) => c.scrapPct < b.scrapPct ? c : b);
     return { results, best };
-  }, [slitWidth, gaugeNum, headsTails, orderVal, orderUnit, sheetLength, density]);
+  }, [slitWidth, gaugeNum, headsTails, orderVal, orderUnit, sheetLength, density, masterWidths]);
 
   // ─────────────────────────────────────────────────────────────
-  // SLIT STOCK ANALYSIS — Per actual stock coil
+  // SLIT STOCK ANALYSIS
   // ─────────────────────────────────────────────────────────────
   const slitStockAnalysis = useMemo(() => {
     if (!slitCalc || gaugeOver) return [];
@@ -269,9 +299,6 @@ export default function RolledCoilCalculator() {
     const htDecimal = (parseFloat(headsTails) || 0) / 100;
     const maxWt = parseFloat(maxCoilWt) || 0;
     const maxOD = parseFloat(maxCoilOD) || 0;
-
-    // The net order quantity in lbs (used for canFulfill comparison)
-    // We get this from the best master's orderLbs, which is always net lbs regardless of master width
     const netOrderLbs = slitCalc.best ? slitCalc.best.orderLbs : 0;
 
     return stockCoils.map((sc) => {
@@ -280,19 +307,16 @@ export default function RolledCoilCalculator() {
       if (scWt <= 0 || scW <= 0) return { ...sc, valid: false, reason: "Missing width or weight" };
       if (scW < sw) return { ...sc, valid: false, reason: `Coil width ${scW}" < slit width ${sw}"` };
 
-      // ── Yield for THIS coil's actual width ──────────────────
       const yields = calcSlitYields(scW, sw, htDecimal);
       if (!yields) return { ...sc, valid: false, reason: `${sw}" slit doesn't fit in ${scW}" master` };
 
       const { numSlits, offalIn, offalPctDecimal, slitYieldDecimal, totalYieldDecimal, scrapDecimal } = yields;
 
-      // Net usable output from this entire master coil
       const outputPerMaster = scWt * totalYieldDecimal;
       const slitCoilWt = outputPerMaster / numSlits;
       const lbsPerFtSlit = lbsPerFt(sw, gaugeNum, density);
       const outputFtPerSlit = lbsPerFtSlit > 0 ? slitCoilWt / lbsPerFtSlit : 0;
 
-      // Coil splitting logic (max weight / OD constraints)
       let coilSizeLimit = 0;
       const maxWtAtOD = (maxOD > 0 && maxOD > coreIn)
         ? ((maxOD * maxOD - coreIn * coreIn) * PI * density * sw) / 4
@@ -318,27 +342,14 @@ export default function RolledCoilCalculator() {
       const masterFt = coilFeet(scWt, scW, gaugeNum, density);
       const masterOD = coilOD(scWt, scW, density, coreIn);
 
-      // ── Order coverage — all math uses THIS coil's own yield ─
-      // canFulfill: does net output from this coil cover the net order?
       const canFulfill = netOrderLbs > 0 ? outputPerMaster >= netOrderLbs : null;
-
-      // Gross master lbs this coil must consume to yield the order
-      // Uses THIS coil's totalYieldDecimal — not the best master's yield
       const masterLbsNeededForOrder = netOrderLbs > 0 ? netOrderLbs / totalYieldDecimal : 0;
-
-      // Leftover master = raw lbs remaining after the order-serving portion is consumed
       const leftoverMasterLbs = masterLbsNeededForOrder > 0
         ? Math.max(0, scWt - masterLbsNeededForOrder)
         : 0;
-
-      // Leftover output = usable lbs that will come off the leftover master
-      // MUST use totalYieldDecimal (0.7554), NOT totalYield (75.54)
       const leftoverOutputLbs = leftoverMasterLbs * totalYieldDecimal;
-
-      // Leftover footage of the leftover master (raw, unprocessed)
       const leftoverMasterFt = coilFeet(leftoverMasterLbs, scW, gaugeNum, density);
 
-      // Scrap weight breakdown for this entire master coil
       const offalLbs = scWt * offalPctDecimal;
       const htLbs = scWt * slitYieldDecimal * htDecimal;
       const totalScrapLbs = scWt * scrapDecimal;
@@ -354,23 +365,19 @@ export default function RolledCoilCalculator() {
         coilSizeLimit, fullCoilsPerSlit, pupWtPerSlit, coilsPerSlit,
         fullSlitCoilOD, pupSlitCoilOD, totalSlitCoilsFromMaster,
         masterFt, masterOD,
-        canFulfill,
-        netOrderLbs,
-        masterLbsNeededForOrder,
-        leftoverMasterLbs,
-        leftoverOutputLbs,   // ← FIXED: leftoverMasterLbs × totalYieldDecimal
-        leftoverMasterFt,
+        canFulfill, netOrderLbs,
+        masterLbsNeededForOrder, leftoverMasterLbs, leftoverOutputLbs, leftoverMasterFt,
         offalLbs, htLbs, totalScrapLbs,
       };
     });
   }, [stockCoils, slitWidth, gaugeNum, headsTails, maxCoilWt, maxCoilOD, coreIn, density, slitCalc, gaugeOver]);
 
   // ─────────────────────────────────────────────────────────────
-  // CTL CALC
+  // CTL CALC — uses dynamic masterWidths
   // ─────────────────────────────────────────────────────────────
   const calcCTLOption = (masterWidth, pieceW, pieceL, ctlScrapPct) => {
     const g = gaugeNum;
-    if (!masterWidth || masterWidth < 30 || pieceW <= 0 || pieceL <= 0 || g < 0.006 || g > 0.325) return null;
+    if (!masterWidth || masterWidth <= 0 || pieceW <= 0 || pieceL <= 0 || g < 0.006 || g > 0.325) return null;
 
     const ctlScrapDecimal = (parseFloat(ctlScrapPct) || 0) / 100;
 
@@ -412,7 +419,7 @@ export default function RolledCoilCalculator() {
       const rotTrim = rotPcs > 0 ? masterWidth - rotPcs * pieceL : masterWidth - pieceL;
       const tooNarrow = pieceW > masterWidth && (!ctlAnyOrientation || pieceL > masterWidth);
       const reason = tooNarrow
-        ? `Piece doesn't fit — need at least ${Math.min(pieceW, ctlAnyOrientation ? pieceL : pieceW)}" wide master`
+        ? `Piece doesn't fit — need at least ${Math.min(pieceW, ctlAnyOrientation ? pieceL : pieceW).toFixed(3)}" wide master`
         : `Edge drop too large: normal ${normalTrim.toFixed(3)}" ${ctlAnyOrientation ? `/ rotated ${rotTrim.toFixed(3)}"` : ""} (max 8")`;
       return { valid: false, reason };
     }
@@ -427,8 +434,6 @@ export default function RolledCoilCalculator() {
     if (pv > 0) { orderPcs = pv; orderLbs = pv * pcWt; orderFt2 = pv * (result.pw * result.pl / 144); }
 
     const cutsNeeded = orderPcs > 0 ? Math.ceil(orderPcs / piecesAcross) : 0;
-    // Gross master ft needed = cuts × cut length ÷ (1 - CTL scrap), accounting for process loss
-    // ctlScrapDecimal already declared above
     const masterFtNeeded = cutsNeeded > 0 ? (cutsNeeded * cutLength) / (12 * (1 - ctlScrapDecimal)) : 0;
     const masterLbsNeeded = masterFtNeeded * lbsPerFtMaster;
 
@@ -446,16 +451,18 @@ export default function RolledCoilCalculator() {
     const pl = parseFloat(ctlPieceLength) || 0;
     if (pw <= 0 || pl <= 0 || gaugeNum <= 0 || gaugeOver) return null;
 
-    const results = STANDARD_WIDTHS.map((mw) => {
+    const results = masterWidths.map((mw) => {
       const r = calcCTLOption(mw, pw, pl, ctlScrap);
-      return r ? { ...r, mw } : { mw, valid: false, reason: `No valid layout for ${mw}" master` };
+      // Flag if this width came from a stock coil
+      const isStockWidth = !BASE_STANDARD_WIDTHS.includes(mw);
+      return r ? { ...r, mw, isStockWidth } : { mw, valid: false, isStockWidth, reason: r?.reason || `No valid layout for ${mw}" master` };
     });
 
     const valid = results.filter((r) => r.valid);
     if (!valid.length) return { results, best: null };
     const best = valid.reduce((b, c) => c.scrapPct < b.scrapPct ? c : b);
     return { results, best };
-  }, [ctlPieceWidth, ctlPieceLength, ctlScrap, ctlAnyOrientation, ctlGrainReq, gaugeNum, gaugeOver, ctlQtyPcs, density]);
+  }, [ctlPieceWidth, ctlPieceLength, ctlScrap, ctlAnyOrientation, ctlGrainReq, gaugeNum, gaugeOver, ctlQtyPcs, density, masterWidths]);
 
   const ctlPcWt = useMemo(() => {
     const pw = parseFloat(ctlPieceWidth) || 0;
@@ -491,7 +498,7 @@ export default function RolledCoilCalculator() {
   // CTL STOCK ANALYSIS
   // ─────────────────────────────────────────────────────────────
   const ctlStockAnalysis = useMemo(() => {
-    if (!ctlCalc || !ctlCalc.best || gaugeOver) return [];
+    if (!ctlCalc || gaugeOver) return [];
     const orderPcs = parseFloat(ctlQtyPcs) || 0;
     const ctlScrapDecimal = (parseFloat(ctlScrap) || 0) / 100;
 
@@ -507,7 +514,6 @@ export default function RolledCoilCalculator() {
 
       const lbsPerFtCoil = lbsPerFt(scW, gaugeNum, density);
       const masterFt = lbsPerFtCoil > 0 ? scWt / lbsPerFtCoil : 0;
-      // Usable master ft after CTL process scrap
       const usableFt = masterFt * (1 - ctlScrapDecimal);
       const cutsAvail = pl > 0 ? Math.floor(usableFt / (pl / 12)) : 0;
       const pcsAvail = cutsAvail * opt.piecesAcross;
@@ -516,10 +522,7 @@ export default function RolledCoilCalculator() {
       const ftNeeded = cutsNeeded > 0 ? (cutsNeeded * opt.cutLength) / (12 * (1 - ctlScrapDecimal)) : 0;
       const lbsNeeded = ftNeeded * lbsPerFtCoil;
 
-      // canFulfill: compare available pieces vs needed pieces (net to net)
       const canFulfill = orderPcs > 0 ? pcsAvail >= orderPcs : null;
-
-      // Leftover footage = master footage minus the portion consumed by order
       const leftoverFt = Math.max(0, masterFt - ftNeeded);
       const leftoverLbs = leftoverFt * lbsPerFtCoil;
       const pcsFromThisCoil = orderPcs > 0 ? Math.min(pcsAvail, orderPcs) : pcsAvail;
@@ -581,6 +584,12 @@ export default function RolledCoilCalculator() {
   // ─────────────────────────────────────────────────────────────
   // RENDER HELPERS
   // ─────────────────────────────────────────────────────────────
+
+  // Dynamic grid: if more than 4 master widths, use auto-fill
+  const widthGridStyle = masterWidths.length > 4
+    ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }
+    : { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 };
+
   function renderWidthCard(r, best, selectedMw, onSelect) {
     const isBest = best && r.mw === best.mw;
     const isSelected = r.mw === selectedMw;
@@ -594,6 +603,7 @@ export default function RolledCoilCalculator() {
       >
         {isSelected && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>● SELECTED</div>}
         {!isSelected && isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "#fff", color: "#dc2626", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px", border: "1px solid #fecaca" }}>★ BEST</div>}
+        {r.isStockWidth && <div style={{ position: "absolute", top: (isSelected || isBest) ? 32 : 10, right: 10, background: "#171717", color: "#fbbf24", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>◆ STOCK</div>}
         <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isSelected || isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
         {!r.valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{r.reason}</p>
@@ -641,6 +651,7 @@ export default function RolledCoilCalculator() {
         {isSelected && <div style={{ position: "absolute", top: 10, right: 10, background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px" }}>● SELECTED</div>}
         {!isSelected && isBest && <div style={{ position: "absolute", top: 10, right: 10, background: "#fff", color: "#dc2626", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, letterSpacing: "0.5px", border: "1px solid #fecaca" }}>★ BEST</div>}
         {r.rotated && <div style={{ position: "absolute", top: (isSelected || isBest) ? 32 : 10, right: 10, background: "#171717", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>↔ ROTATED</div>}
+        {r.isStockWidth && <div style={{ position: "absolute", top: (isSelected || isBest || r.rotated) ? 54 : 10, right: 10, background: "#171717", color: "#fbbf24", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>◆ STOCK</div>}
         <p style={{ fontSize: 20, fontWeight: 800, color: r.valid ? (isSelected || isBest ? "#dc2626" : "#171717") : "#a3a3a3", margin: "0 0 10px", letterSpacing: "-0.5px" }}>{r.mw}"</p>
         {!r.valid ? (
           <p style={{ fontSize: 11, color: "#a3a3a3", fontStyle: "italic" }}>{r.reason}</p>
@@ -723,27 +734,12 @@ export default function RolledCoilCalculator() {
               <div style={{ borderTop: "1px solid #e5e5e5", paddingTop: 10, marginTop: 4 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, color: "#525252", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Order Coverage</p>
                 <div className="rcc-grid4" style={{ gap: 8 }}>
-                  {/*
-                    ORDER NEEDS = net lbs the customer ordered
-                    COIL HAS    = net usable output from this master (after scrap)
-                    These are both NET — apples to apples comparison.
-                  */}
                   <StatBox label="Order Needs" value={`${fmt(analysis.netOrderLbs, 0)} lbs`} />
                   <StatBox label="Coil Output" value={`${fmt(analysis.outputPerMaster, 0)} lbs`} sub="net after scrap" />
                   {analysis.canFulfill ? (
                     <>
-                      <StatBox
-                        label="Leftover Master"
-                        value={`${fmt(analysis.leftoverMasterLbs, 0)} lbs`}
-                        sub="raw, unprocessed"
-                        warn={analysis.leftoverMasterLbs > 10}
-                      />
-                      <StatBox
-                        label="Leftover Output"
-                        value={`${fmt(analysis.leftoverOutputLbs, 0)} lbs`}
-                        sub="net usable from leftover"
-                        warn={analysis.leftoverOutputLbs > 10}
-                      />
+                      <StatBox label="Leftover Master" value={`${fmt(analysis.leftoverMasterLbs, 0)} lbs`} sub="raw, unprocessed" warn={analysis.leftoverMasterLbs > 10} />
+                      <StatBox label="Leftover Output" value={`${fmt(analysis.leftoverOutputLbs, 0)} lbs`} sub="net usable from leftover" warn={analysis.leftoverOutputLbs > 10} />
                     </>
                   ) : (
                     <>
@@ -755,14 +751,14 @@ export default function RolledCoilCalculator() {
               </div>
             )}
           </>
-      ) : (
+        ) : (
           <>
-            {/* ── Headline yield banner — always visible, no order needed ── */}
+            {/* ── CTL Headline yield banner — always visible, no order needed ── */}
             <div style={{ background: "linear-gradient(135deg,#171717,#262626)", borderRadius: 10, padding: "12px 16px", marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 20, alignItems: "center" }}>
               <div>
                 <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Sheets Available</p>
                 <p style={{ fontSize: 28, fontWeight: 800, color: "#4ade80", margin: 0, letterSpacing: "-1px" }}>{analysis.pcsAvail.toLocaleString()}</p>
-                <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>pcs · {analysis.piecesAcross} across · {analysis.cutsAvail} cuts</p>
+                <p style={{ fontSize: 10, color: "#a3a3a3", marginTop: 2 }}>{analysis.piecesAcross} across · {analysis.cutsAvail} cuts</p>
               </div>
               <div style={{ borderLeft: "1px solid #404040", paddingLeft: 20 }}>
                 <p style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 2px" }}>Total Yield</p>
@@ -810,7 +806,7 @@ export default function RolledCoilCalculator() {
                   <StatBox label="Leftover Lbs" value={`${fmt(analysis.leftoverLbs, 0)} lbs`} warn={analysis.leftoverLbs > 10} />
                 </div>
               </div>
-        )}
+            )}
           </>
         )}
       </div>
@@ -838,12 +834,15 @@ export default function RolledCoilCalculator() {
 
     return (
       <div style={{ background: "linear-gradient(135deg,#fafafa,#f5f5f5)", border: "2px solid #dc2626", borderRadius: 14, padding: 20, marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
-          <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
-            {isBestSelected ? "★ Best Option" : "● Selected"} Summary — {selected.mw}" Master
-            {!isBestSelected && best && <span style={{ fontWeight: 400, color: "#a3a3a3", fontSize: 10, marginLeft: 8 }}>(best is {best.mw}")</span>}
-          </p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
+              {isBestSelected ? "★ Best Option" : "● Selected"} Summary — {selected.mw}" Master
+              {!isBestSelected && best && <span style={{ fontWeight: 400, color: "#a3a3a3", fontSize: 10, marginLeft: 8 }}>(best is {best.mw}")</span>}
+            </p>
+          </div>
+          <button onClick={saveCalc} style={{ ...btnStyle(true), padding: "7px 16px", fontSize: 11 }}>+ Save to History</button>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: scrapRows.length > 0 ? 16 : 0 }}>
           {rows.map((r, i) => (
@@ -890,12 +889,15 @@ export default function RolledCoilCalculator() {
     ];
     return (
       <div style={{ background: "linear-gradient(135deg,#fafafa,#f5f5f5)", border: "2px solid #dc2626", borderRadius: 14, padding: 20, marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
-          <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
-            {isBestSelected ? "★ Best Option" : "● Selected"} Summary — {selected.mw}" Master{selected.rotated ? " (↔ Rotated)" : ""}
-            {!isBestSelected && best && <span style={{ fontWeight: 400, color: "#a3a3a3", fontSize: 10, marginLeft: 8 }}>(best is {best.mw}")</span>}
-          </p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#404040", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
+              {isBestSelected ? "★ Best Option" : "● Selected"} Summary — {selected.mw}" Master{selected.rotated ? " (↔ Rotated)" : ""}
+              {!isBestSelected && best && <span style={{ fontWeight: 400, color: "#a3a3a3", fontSize: 10, marginLeft: 8 }}>(best is {best.mw}")</span>}
+            </p>
+          </div>
+          <button onClick={saveCalc} style={{ ...btnStyle(true), padding: "7px 16px", fontSize: 11 }}>+ Save to History</button>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
           {rows.map((r, i) => (
@@ -940,6 +942,12 @@ export default function RolledCoilCalculator() {
             </div>
           ))}
         </div>
+        {/* Info note about dynamic master widths */}
+        {stockCoils.some((sc) => parseFloat(sc.width) > 0 && !BASE_STANDARD_WIDTHS.some((bw) => Math.abs(bw - parseFloat(sc.width)) < 0.1)) && (
+          <p style={{ fontSize: 10, color: "#737373", marginTop: 10, fontStyle: "italic", borderTop: "1px solid #e5e5e5", paddingTop: 8 }}>
+            ◆ Stock coil width(s) added as additional master width options in the results below.
+          </p>
+        )}
       </div>
     );
   }
@@ -1001,7 +1009,17 @@ export default function RolledCoilCalculator() {
         {mode === "slit" && (
           <>
             <div className="rcc-card">
-              <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Customer Requirements</p>
+              {/* Header row with title + Refresh button */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <p style={{ ...S.sec, margin: 0 }}><span style={S.dot}></span>Customer Requirements</p>
+                <button
+                  onClick={resetSlit}
+                  style={{ ...btnStyle(false), fontSize: 11, padding: "6px 14px" }}
+                  title="Clear all slit fields"
+                >
+                  ↺ Refresh
+                </button>
+              </div>
               <div className="rcc-grid4">
                 <div>
                   <label style={S.lbl}>Slit Width (")</label>
@@ -1046,8 +1064,8 @@ export default function RolledCoilCalculator() {
 
             {!gaugeOver && slitCalc && (
               <div className="rcc-card">
-                <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Standard Master Width Options</p>
-                <div className="rcc-width-grid">
+                <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Master Width Options</p>
+                <div style={widthGridStyle}>
                   {slitCalc.results.map((r) => renderWidthCard(r, slitCalc.best, selectedSlitMw ?? slitCalc.best?.mw, setSelectedSlitMw))}
                 </div>
                 {slitCalc.best && (() => {
@@ -1089,7 +1107,17 @@ export default function RolledCoilCalculator() {
         {mode === "ctl" && (
           <>
             <div className="rcc-card">
-              <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>CTL Sheet Requirements</p>
+              {/* Header row with title + Refresh button */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <p style={{ ...S.sec, margin: 0 }}><span style={S.dot}></span>CTL Sheet Requirements</p>
+                <button
+                  onClick={resetCtl}
+                  style={{ ...btnStyle(false), fontSize: 11, padding: "6px 14px" }}
+                  title="Clear all CTL fields"
+                >
+                  ↺ Refresh
+                </button>
+              </div>
               <div className="rcc-grid4">
                 <div>
                   <label style={S.lbl}>Piece Width (")</label>
@@ -1164,8 +1192,8 @@ export default function RolledCoilCalculator() {
 
             {!gaugeOver && ctlCalc && (
               <div className="rcc-card">
-                <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Standard Master Width Options</p>
-                <div className="rcc-width-grid">
+                <p style={{ ...S.sec, marginBottom: 14 }}><span style={S.dot}></span>Master Width Options</p>
+                <div style={widthGridStyle}>
                   {ctlCalc.results.map((r) => renderCTLWidthCard(r, ctlCalc.best, selectedCtlMw ?? ctlCalc.best?.mw, setSelectedCtlMw))}
                 </div>
                 {ctlCalc.best && (() => {
